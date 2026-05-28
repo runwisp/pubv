@@ -1,7 +1,6 @@
 # pubv — one-command changelog releases
 
 [![npm version](https://img.shields.io/npm/v/@runwisp/pubv.svg)](https://www.npmjs.com/package/@runwisp/pubv)
-[![npm downloads](https://img.shields.io/npm/dm/@runwisp/pubv.svg)](https://www.npmjs.com/package/@runwisp/pubv)
 [![license](https://img.shields.io/npm/l/@runwisp/pubv.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/@runwisp/pubv.svg)](https://nodejs.org)
 
