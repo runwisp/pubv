@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-28
+
 ### Added
 
 - Initial TypeScript port of the internal `pubv` script.
@@ -14,4 +16,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/riki137/pubv/compare/HEAD...HEAD
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/runwisp/pubv/releases/tag/v1.0.0

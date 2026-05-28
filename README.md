@@ -1,9 +1,9 @@
 # pubv — one-command changelog releases
 
-[![npm version](https://img.shields.io/npm/v/pubv.svg)](https://www.npmjs.com/package/pubv)
-[![npm downloads](https://img.shields.io/npm/dm/pubv.svg)](https://www.npmjs.com/package/pubv)
-[![license](https://img.shields.io/npm/l/pubv.svg)](./LICENSE)
-[![node](https://img.shields.io/node/v/pubv.svg)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/@runwisp/pubv.svg)](https://www.npmjs.com/package/@runwisp/pubv)
+[![npm downloads](https://img.shields.io/npm/dm/@runwisp/pubv.svg)](https://www.npmjs.com/package/@runwisp/pubv)
+[![license](https://img.shields.io/npm/l/@runwisp/pubv.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/@runwisp/pubv.svg)](https://nodejs.org)
 
 > **Automate releases from your `CHANGELOG.md`.** Graduate the `[Unreleased]` block into a real release — bump the version, rewrite the changelog, commit, tag, and push — with one command.
 
@@ -33,10 +33,10 @@ Under the hood: it reads `CHANGELOG.md`, figures out a sensible default for the 
 
 ```bash
 # one-shot
-bunx pubv          # or:  npx pubv
+bunx @runwisp/pubv          # or:  npx @runwisp/pubv
 
-# global
-bun add -g pubv    # or:  npm install -g pubv
+# global (recommended — puts `pubv` on your PATH)
+bun add -g @runwisp/pubv    # or:  npm install -g @runwisp/pubv
 ```
 
 Requires Node 20+ (or Bun).

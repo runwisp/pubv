@@ -1,6 +1,6 @@
 {
-  "name": "pubv",
-  "version": "0.0.0",
+  "name": "@runwisp/pubv",
+  "version": "1.0.0",
   "description": "Automate releases from your Keep a Changelog CHANGELOG.md: bump the version, update the changelog, then commit, tag, and push in one command. A tiny, zero-config release CLI for GitHub, GitLab, and Bitbucket.",
   "type": "module",
   "bin": {
@@ -44,12 +44,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/riki137/pubv.git"
+    "url": "git+https://github.com/runwisp/pubv.git"
   },
   "bugs": {
-    "url": "https://github.com/riki137/pubv/issues"
+    "url": "https://github.com/runwisp/pubv/issues"
   },
-  "homepage": "https://github.com/riki137/pubv#readme",
+  "homepage": "https://github.com/runwisp/pubv#readme",
   "dependencies": {
     "picocolors": "^1.1.1"
   },
