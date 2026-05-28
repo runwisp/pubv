@@ -1,0 +1,7 @@
+{
+  "version": "1.1.0",
+  "date": "2026-05-25",
+  "unreleasedUrl": "https://github.com/foo/bar/compare/v1.1.0...main",
+  "versionUrl": "https://github.com/foo/bar/compare/v1.0.0...v1.1.0",
+  "expectError": "no-unreleased"
+}
