@@ -155,6 +155,8 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
     );
   }
 
+  printChanges(cl.unreleased.body, log);
+
   const host = pickHost(cl);
   const tags = await git.listTags();
   const tagPrefix = await resolveTagPrefix(inputs, tags, prompt);
@@ -346,6 +348,15 @@ async function resolveFromRef(
 
 // ─── confirm + apply ──────────────────────────────────────────────────────
 
+function printChanges(entries: readonly string[], log: Logger): void {
+  log.section('changes');
+  if (entries.length === 0) {
+    log.warn('no entries under [Unreleased] — this release would be empty');
+  } else {
+    for (const entry of entries) log.line(entry);
+  }
+}
+
 function printPlan(plan: ReleasePlan, log: Logger): void {
   log.kv('commit', plan.commitMessage);
   log.kv('date', plan.date);
@@ -353,13 +364,6 @@ function printPlan(plan: ReleasePlan, log: Logger): void {
     log.kv('branch', plan.releaseBranch, `merge request into ${plan.branch}`);
   } else {
     log.kv('branch', plan.branch);
-  }
-
-  log.section('changes');
-  if (plan.entries.length === 0) {
-    log.warn(`no entries under [Unreleased] — ${plan.tagName} would be empty`);
-  } else {
-    for (const entry of plan.entries) log.line(entry);
   }
 }
 

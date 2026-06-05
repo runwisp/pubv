@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The changelog preview is now shown before the version prompt, so the entries can inform the version choice.
+
 ## [1.0.0] - 2026-05-28
 
 ### Added

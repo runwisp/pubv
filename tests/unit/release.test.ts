@@ -158,6 +158,11 @@ describe('run() — happy paths', () => {
       .filter((e) => e.kind === 'line')
       .map((e) => e.args[0]);
     expect(lineEvents).toEqual(plan.entries);
+
+    // The preview comes before the `plan` section (and thus before the
+    // version prompt), so the user can pick a version from the entries.
+    const planIdx = ports.log.events.findIndex((e) => e.kind === 'section' && e.args[0] === 'plan');
+    expect(planIdx).toBeGreaterThan(changesIdx);
   });
 
   test('empty [Unreleased] body warns instead of previewing entries', async () => {
