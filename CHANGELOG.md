@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-08
+
 ### Added
 
 - Support for arbitrary `PREFIX.x.y.z` tag/version formats (e.g. `myapp.1.2.3`, `app-1.2.3`). Prefixes are auto-detected from existing tags or can be typed directly at the version prompt; custom prefixes also appear in changelog headings.
@@ -25,5 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.1.0...main
+[1.1.0]: https://github.com/runwisp/pubv/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/runwisp/pubv/releases/tag/v1.0.0
