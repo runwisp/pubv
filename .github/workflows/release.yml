@@ -21,6 +21,10 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
+      - name: Upgrade npm for OIDC trusted publishing
+        # Trusted publishing (no token; uses the id-token below) requires npm
+        # >= 11.5.1, newer than the npm bundled with Node 20.
+        run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
@@ -39,6 +43,7 @@ jobs:
           git config --global init.defaultBranch main
       - run: bun test
       - name: Publish to npm
+        # Authentication comes from OIDC trusted publishing (id-token: write
+        # above) configured for @runwisp/pubv on npmjs.com — no NPM_TOKEN needed.
+        # --provenance is implied by trusted publishing but kept explicit.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
