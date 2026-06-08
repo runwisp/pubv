@@ -122,13 +122,42 @@ describe('run() — happy paths', () => {
     expect(ports.fs.files.get('CHANGELOG.md')).toBe(fixture.expected!);
   });
 
-  test('detects bare tag prefix and emits bare tag', async () => {
+  test('detects bare tag prefix and emits bare tag + bare commit message', async () => {
     const fixture = loadFixture('02-minor-added');
     ports.fs.files.set('CHANGELOG.md', fixture.input);
     ports.git.tags = ['1.0.0', '1.1.0', '1.2.0'];
 
     const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
     expect(plan.tagName).toBe('1.3.0');
+    expect(plan.commitMessage).toBe('1.3.0');
+    expect(ports.git.calls).toContain('commit:1.3.0');
+    expect(ports.git.calls).toContain('tag:1.3.0:1.3.0');
+  });
+
+  test('adopts a custom prefix embedded in the version arg', async () => {
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
+
+    const plan = await run(defaultInputs({ versionArg: 'myapp.1.3.0' }), ports);
+
+    expect(plan.nextVersion).toBe('1.3.0');
+    expect(plan.tagName).toBe('myapp.1.3.0');
+    expect(plan.commitMessage).toBe('myapp.1.3.0');
+    expect(plan.newChangelog).toContain('## [myapp.1.3.0] - 2026-05-25');
+    expect(ports.git.calls).toContain('tag:myapp.1.3.0:myapp.1.3.0');
+  });
+
+  test('auto-detects a custom prefix from existing tags with a shorthand bump', async () => {
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
+
+    const plan = await run(defaultInputs({ versionArg: 'minor' }), ports);
+
+    expect(plan.nextVersion).toBe('1.3.0');
+    expect(plan.tagName).toBe('myapp.1.3.0');
+    expect(plan.commitMessage).toBe('myapp.1.3.0');
   });
 
   test('plan carries the [Unreleased] body and previews it in the log', async () => {

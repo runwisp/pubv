@@ -117,6 +117,52 @@ describe('e2e: pubv against a real git repo', () => {
     expect(repo.git(['tag', '--list']).stdout.trim().split('\n')).toContain('1.3.0');
   });
 
+  test('auto-detects a custom prefix and graduates a minor release end-to-end', async () => {
+    const fx = loadFixture('10-custom-prefix');
+    const repo = track(
+      await makeRepo({ changelogContent: fx.input, initialTags: ['myapp.1.0.0'] }),
+    );
+
+    const run = runPubv(['--yes', '--date=2026-05-25', 'minor'], repo.dir);
+    expect(run.code).toBe(0);
+
+    const written = readFileSync(join(repo.dir, 'CHANGELOG.md'), 'utf8');
+    expect(written).toBe(fx.expected!);
+
+    expect(repo.git(['tag', '--list']).stdout.trim().split('\n')).toContain('myapp.1.1.0');
+    expect(repo.git(['log', '-1', '--pretty=%s']).stdout.trim()).toBe('myapp.1.1.0');
+
+    const remoteTags = repo.remoteGit(['tag', '--list']).stdout.trim().split('\n');
+    expect(remoteTags).toContain('myapp.1.1.0');
+  });
+
+  test('a prefix embedded in the version arg wins over detection', async () => {
+    const fx = loadFixture('02-minor-added');
+    const repo = track(await makeRepo({ changelogContent: fx.input, initialTags: ['v1.2.0'] }));
+
+    const run = runPubv(['--yes', '--date=2026-05-25', 'lib-2.0.0'], repo.dir);
+    expect(run.code).toBe(0);
+
+    expect(repo.git(['tag', '--list']).stdout.trim().split('\n')).toContain('lib-2.0.0');
+    expect(repo.git(['log', '-1', '--pretty=%s']).stdout.trim()).toBe('lib-2.0.0');
+    // Custom prefix lands in the heading too.
+    expect(readFileSync(join(repo.dir, 'CHANGELOG.md'), 'utf8')).toContain('## [lib-2.0.0] -');
+  });
+
+  test('graduates a prerelease with a glued numeric suffix (RC5 → RC6)', async () => {
+    const fx = loadFixture('09-prerelease-glued-suffix');
+    const repo = track(await makeRepo({ changelogContent: fx.input, initialTags: ['v1.0.0-RC5'] }));
+
+    const run = runPubv(['--yes', '--date=2026-05-25', 'pre'], repo.dir);
+    expect(run.code).toBe(0);
+
+    const written = readFileSync(join(repo.dir, 'CHANGELOG.md'), 'utf8');
+    expect(written).toBe(fx.expected!);
+
+    expect(repo.git(['tag', '--list']).stdout.trim().split('\n')).toContain('v1.0.0-RC6');
+    expect(repo.git(['log', '-1', '--pretty=%s']).stdout.trim()).toBe('v1.0.0-RC6');
+  });
+
   test('--merge-request opens a release branch + MR, then --tag-release tags the merge', async () => {
     const fx = loadFixture('02-minor-added');
     const repo = track(await makeRepo({ changelogContent: fx.input, initialTags: ['v1.2.0'] }));

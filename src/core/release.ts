@@ -11,7 +11,7 @@ import {
 } from './changelog.js';
 import { PubvError } from './errors.js';
 import { type HostInfo, compareUrl, detectHost, mergeRequestUrl } from './host.js';
-import { type TagPrefix, applyPrefix, detectPrefix } from './tag-prefix.js';
+import { type TagPrefix, applyPrefix, detectPrefix, splitPrefix } from './tag-prefix.js';
 import {
   type BumpKind,
   type SemVer,
@@ -157,7 +157,6 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
 
   const host = pickHost(cl);
   const tags = await git.listTags();
-  const tagPrefix = await resolveTagPrefix(inputs, tags, prompt);
   const suggestions = computeSuggestions(cl);
 
   log.section('plan');
@@ -168,8 +167,16 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
     log.kv(kind, candidate, kind === suggestions.defaultKind ? '← default' : undefined);
   }
 
-  const nextVersion = await resolveNextVersion(inputs, suggestions, prompt);
+  // Resolve the version first: a literal version arg may carry its own prefix
+  // (e.g. `myapp.1.2.3`), which takes precedence over tag auto-detection.
+  const { version: nextVersion, embeddedPrefix } = await resolveNextVersion(
+    inputs,
+    suggestions,
+    prompt,
+  );
+  const tagPrefix = await resolveTagPrefix(inputs, tags, embeddedPrefix, prompt);
   const tagName = applyPrefix(nextVersion, tagPrefix);
+  const headingVersion = changelogVersion(nextVersion, tagPrefix);
   const fromRef = await resolveFromRef(suggestions.last, tagPrefix, git);
   const branch = await git.currentBranch();
   const defaultBranch = await git.defaultBranch();
@@ -178,11 +185,11 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
   const mrUrl =
     mode === 'merge-request' ? mergeRequestUrl(host, releaseBranch!, defaultBranch) : null;
 
-  log.kv('tag fmt', tagName, prefixNote(inputs.tagPrefixOverride, tagPrefix, tags));
+  log.kv('tag fmt', tagName, prefixNote(inputs.tagPrefixOverride, embeddedPrefix, tagPrefix, tags));
 
   const newChangelog = serialize(
     transformChangelog(cl, {
-      version: nextVersion,
+      version: headingVersion,
       date: inputs.today,
       unreleasedUrl: compareUrl(host, tagName, defaultBranch),
       versionUrl: compareUrl(host, fromRef, tagName),
@@ -194,7 +201,7 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
     branch,
     nextVersion,
     tagName,
-    commitMessage: `v${nextVersion}`,
+    commitMessage: tagName,
     date: inputs.today,
     entries: [...cl.unreleased.body],
     newChangelog,
@@ -234,9 +241,20 @@ interface VersionSuggestions {
   candidates: Partial<Record<BumpKind, string>>;
 }
 
+/**
+ * The version string written into CHANGELOG.md headings. Custom prefixes are
+ * shown so headings match their tags (`## [myapp.1.2.3]`), but the conventional
+ * `v` prefix and bare tags keep Keep-a-Changelog's bare headings (`## [1.2.3]`).
+ */
+function changelogVersion(version: string, prefix: TagPrefix): string {
+  return prefix === '' || prefix === 'v' ? version : applyPrefix(version, prefix);
+}
+
 function computeSuggestions(cl: Changelog): VersionSuggestions {
   const last = latestRelease(cl);
-  const lastSemver = last ? parseSemver(last.version) : null;
+  // Headings may carry a prefix (`myapp.1.2.3`); strip it before bumping.
+  const lastSplit = last ? splitPrefix(last.version) : null;
+  const lastSemver = lastSplit ? parseSemver(lastSplit.version) : null;
 
   const candidates: Partial<Record<BumpKind, string>> = {};
   if (lastSemver) {
@@ -272,14 +290,16 @@ function orderedKinds(s: VersionSuggestions): BumpKind[] {
 async function resolveTagPrefix(
   inputs: ReleaseInputs,
   tags: readonly string[],
+  embeddedPrefix: TagPrefix | null,
   prompt: Prompt,
 ): Promise<TagPrefix> {
   if (inputs.tagPrefixOverride !== null) return inputs.tagPrefixOverride;
+  if (embeddedPrefix !== null) return embeddedPrefix;
   const detection = detectPrefix(tags);
-  if (detection === 'v' || detection === '') return detection;
+  if (detection.kind === 'unique') return detection.prefix;
   if (inputs.yes) return 'v';
   return await prompt.select<TagPrefix>(
-    detection === 'none'
+    detection.kind === 'none'
       ? 'no existing tags. tag prefix?'
       : 'mixed prefixed/bare tags. which to use?',
     [
@@ -292,34 +312,51 @@ async function resolveTagPrefix(
 
 function prefixNote(
   override: TagPrefix | null,
+  embeddedPrefix: TagPrefix | null,
   resolved: TagPrefix,
   tags: readonly string[],
 ): string | undefined {
   if (override !== null) return 'from --tag-prefix';
+  if (embeddedPrefix !== null) return 'from version arg';
   const detection = detectPrefix(tags);
-  if (detection === resolved) return 'matches existing tags';
-  if (detection === 'none') return 'default (no existing tags)';
+  if (detection.kind === 'unique' && detection.prefix === resolved) return 'matches existing tags';
+  if (detection.kind === 'none') return 'default (no existing tags)';
   return undefined;
+}
+
+interface ResolvedVersion {
+  /** Bare semver, e.g. `1.2.3` or `1.0.0-rc.2`. */
+  version: string;
+  /** Prefix carried by a literal version arg (`myapp.` from `myapp.1.2.3`); `null` otherwise. */
+  embeddedPrefix: TagPrefix | null;
 }
 
 async function resolveNextVersion(
   inputs: ReleaseInputs,
   s: VersionSuggestions,
   prompt: Prompt,
-): Promise<string> {
+): Promise<ResolvedVersion> {
   const raw = inputs.versionArg ?? (inputs.yes ? s.defaultVersion : await askForVersion(prompt, s));
-  const expanded = expandShorthand(raw.trim() || s.defaultVersion, s.candidates) ?? raw.trim();
-  if (!isValidVersionString(expanded)) {
-    throw new PubvError('invalid-version', `not a valid x.y.z[-tag] version: ${expanded}`);
+  const trimmed = raw.trim() || s.defaultVersion;
+
+  const shorthand = expandShorthand(trimmed, s.candidates);
+  if (shorthand) return { version: shorthand, embeddedPrefix: null };
+
+  // A literal version may include a prefix (`myapp.1.2.3`); split it off and
+  // treat the bare semver as the version. An empty prefix means a bare version
+  // was typed, so fall back to tag detection rather than forcing "no prefix".
+  const split = splitPrefix(trimmed);
+  if (!split || !isValidVersionString(split.version)) {
+    throw new PubvError('invalid-version', `not a valid [prefix]x.y.z[-tag] version: ${trimmed}`);
   }
-  return expanded;
+  return { version: split.version, embeddedPrefix: split.prefix === '' ? null : split.prefix };
 }
 
 async function askForVersion(prompt: Prompt, s: VersionSuggestions): Promise<string> {
   const tail =
     s.lastSemver === null
-      ? 'x.y.z[-tag]'
-      : `major/minor/patch${s.candidates.prerelease ? '/pre' : ''} or x.y.z[-tag]`;
+      ? '[prefix]x.y.z[-tag]'
+      : `major/minor/patch${s.candidates.prerelease ? '/pre' : ''} or [prefix]x.y.z[-tag]`;
   return await prompt.input(`version? (${tail})`, s.defaultVersion);
 }
 
@@ -340,7 +377,13 @@ async function resolveFromRef(
   prefix: TagPrefix,
   git: Git,
 ): Promise<string> {
-  if (lastVersion) return applyPrefix(lastVersion, prefix);
+  if (lastVersion) {
+    // A heading that already carries a prefix (`myapp.1.0.0`) is the full tag
+    // name; a bare heading needs the resolved prefix applied to reach the tag.
+    const split = splitPrefix(lastVersion);
+    if (split && split.prefix !== '') return lastVersion;
+    return applyPrefix(lastVersion, prefix);
+  }
   return await git.firstCommit();
 }
 
@@ -468,9 +511,14 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
   }
 
   const tags = await git.listTags();
-  const tagPrefix = await resolveTagPrefix(inputs, tags, prompt);
-  const tagName = applyPrefix(last.version, tagPrefix);
-  const commitMessage = `v${last.version}`;
+  // If the changelog heading already carries a prefix it is the full tag name;
+  // otherwise resolve the prefix (detect / override / prompt) and apply it.
+  const split = splitPrefix(last.version);
+  const tagName =
+    split && split.prefix !== ''
+      ? last.version
+      : applyPrefix(last.version, await resolveTagPrefix(inputs, tags, null, prompt));
+  const commitMessage = tagName;
 
   if (tags.includes(tagName)) {
     throw new PubvError('tag-exists', `tag ${tagName} already exists`);

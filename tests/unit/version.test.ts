@@ -14,6 +14,9 @@ describe('parseSemver', () => {
     ['0.0.0', { major: 0, minor: 0, patch: 0, prerelease: null }],
     ['1.0.0-rc.1', { major: 1, minor: 0, patch: 0, prerelease: 'rc.1' }],
     ['v2.5.4-beta', { major: 2, minor: 5, patch: 4, prerelease: 'beta' }],
+    ['1.0.0-RC5', { major: 1, minor: 0, patch: 0, prerelease: 'RC5' }],
+    ['1.2.1-beta', { major: 1, minor: 2, patch: 1, prerelease: 'beta' }],
+    ['1.2.1-weird-feature', { major: 1, minor: 2, patch: 1, prerelease: 'weird-feature' }],
   ])('parses %s', (input, expected) => {
     expect(parseSemver(input)).toEqual(expected);
   });
@@ -66,6 +69,17 @@ describe('bump', () => {
   test('prerelease bump from a stable version starts at rc.1', () => {
     const v = parseSemver('1.0.0')!;
     expect(formatSemver(bump(v, 'prerelease'))).toBe('1.0.0-rc.1');
+  });
+
+  test.each([
+    ['1.0.0-rc.1', '1.0.0-rc.2'],
+    ['1.0.0-beta', '1.0.0-beta.1'],
+    ['1.0.0-RC5', '1.0.0-RC6'],
+    ['1.0.0-beta2', '1.0.0-beta3'],
+    ['1.2.1-weird-feature', '1.2.1-weird-feature.1'],
+    ['1.0.0-RC9', '1.0.0-RC10'],
+  ])('prerelease bump %s → %s', (input, expected) => {
+    expect(formatSemver(bump(parseSemver(input)!, 'prerelease'))).toBe(expected);
   });
 });
 

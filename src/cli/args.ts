@@ -116,10 +116,13 @@ function handleValue(arg: string, out: ParsedArgs): boolean {
 
   switch (key) {
     case '--tag-prefix':
-      if (value === 'v') out.tagPrefix = 'v';
-      else if (value === 'none' || value === '') out.tagPrefix = '';
-      else
-        throw new PubvError('invalid-flag', `--tag-prefix must be 'v' or 'none', got '${value}'`);
+      if (value === 'none' || value === '') out.tagPrefix = '';
+      else if (/\s/.test(value)) {
+        throw new PubvError(
+          'invalid-flag',
+          `--tag-prefix must not contain whitespace, got '${value}'`,
+        );
+      } else out.tagPrefix = value;
       return true;
     case '--changelog':
       if (!value) throw new PubvError('invalid-flag', '--changelog requires a path');
