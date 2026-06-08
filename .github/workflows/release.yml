@@ -26,6 +26,11 @@ jobs:
       - run: bun run typecheck
       - name: Set version from tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - name: Normalize package.json after version bump
+        # `npm version` rewrites package.json with its own formatting (expanded
+        # arrays), which biome rejects. Re-format so the prepublishOnly lint hook
+        # invoked by `npm publish` does not fail on the bumped file.
+        run: bun run format
       - run: bun run build
       - name: Configure test git identity
         run: |
