@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support for arbitrary `PREFIX.x.y.z` tag/version formats (e.g. `myapp.1.2.3`, `app-1.2.3`). Prefixes are auto-detected from existing tags or can be typed directly at the version prompt; custom prefixes also appear in changelog headings.
+- Prerelease suffixes are recognised and bumped intelligently (`1.0.0-RC5` → `1.0.0-RC6`, `1.2.1-beta`).
+
 ### Changed
 
 - The changelog preview is now shown before the version prompt, so the entries can inform the version choice.
