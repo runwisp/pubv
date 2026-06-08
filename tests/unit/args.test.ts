@@ -27,6 +27,9 @@ describe('parseArgs', () => {
   test('parses --key=value flags', () => {
     expect(parseArgs(['--tag-prefix=v'])).toMatchObject({ tagPrefix: 'v' });
     expect(parseArgs(['--tag-prefix=none'])).toMatchObject({ tagPrefix: '' });
+    expect(parseArgs(['--tag-prefix='])).toMatchObject({ tagPrefix: '' });
+    expect(parseArgs(['--tag-prefix=myapp.'])).toMatchObject({ tagPrefix: 'myapp.' });
+    expect(parseArgs(['--tag-prefix=myapp-'])).toMatchObject({ tagPrefix: 'myapp-' });
     expect(parseArgs(['--changelog=docs/CHANGELOG.md'])).toMatchObject({
       changelogPath: 'docs/CHANGELOG.md',
     });
@@ -60,8 +63,8 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--what'])).toThrow(PubvError);
   });
 
-  test('rejects invalid --tag-prefix value', () => {
-    expect(() => parseArgs(['--tag-prefix=wat'])).toThrow(PubvError);
+  test('rejects a --tag-prefix value containing whitespace', () => {
+    expect(() => parseArgs(['--tag-prefix=my app'])).toThrow(PubvError);
   });
 
   test('rejects extra positional', () => {

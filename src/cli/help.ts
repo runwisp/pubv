@@ -10,7 +10,7 @@ export function helpText(): string {
     pubv ${d('[version]')} ${d('[flags]')}
 
   ${b('Arguments')}
-    version             ${d('x.y.z[-tag]')} or one of ${d('major|minor|patch|pre')}
+    version             ${d('[prefix]x.y.z[-tag]')} or one of ${d('major|minor|patch|pre')}
                         ${d('(omit to be prompted)')}
 
   ${b('Flags')}
@@ -20,7 +20,7 @@ export function helpText(): string {
     --no-tag            ${d('Do not create a tag')}
     --merge-request     ${d('Protected branch: open a release/<v> branch + MR (alias --mr)')}
     --tag-release       ${d('Post-merge: tag the latest changelog release on HEAD, push it')}
-    --tag-prefix=v|none ${d('Override tag-prefix auto-detection')}
+    --tag-prefix=PREFIX ${d('Override tag-prefix auto-detection (v, none, or e.g. myapp.)')}
     --changelog=PATH    ${d('Path to the changelog file (default: CHANGELOG.md)')}
     --remote=NAME       ${d('Remote name (default: origin)')}
     --date=YYYY-MM-DD   ${d("Override today's date in the new heading")}

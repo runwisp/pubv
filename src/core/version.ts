@@ -48,8 +48,12 @@ function bumpPrerelease(pre: string | null): string {
   if (!pre) return 'rc.1';
   const parts = pre.split('.');
   for (let i = parts.length - 1; i >= 0; i--) {
-    if (/^\d+$/.test(parts[i]!)) {
-      parts[i] = String(Number(parts[i]) + 1);
+    // Increment the last segment that ends in a number — whether it's a bare
+    // numeric segment (`rc.1` → `rc.2`) or a number glued to letters
+    // (`RC5` → `RC6`, `beta2` → `beta3`).
+    const m = /^(.*?)(\d+)$/.exec(parts[i]!);
+    if (m) {
+      parts[i] = `${m[1]}${Number(m[2]) + 1}`;
       return parts.join('.');
     }
   }
