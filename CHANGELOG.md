@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Protected default branches are now auto-detected via the `gh`/`glab` CLI before a direct release. When the branch you'd push is protected, `pubv` switches to the merge-request workflow instead of committing and tagging on a branch the push would be rejected from. Detection is best-effort: when it can't run (no CLI, unsupported host, network/auth failure) `pubv` pushes directly as before. Use `--no-protection-check` (or `PUBV_NO_PROTECTION_CHECK=1`) to skip the check.
+
 ## [1.1.0] - 2026-06-08
 
 ### Added

@@ -19,6 +19,7 @@ export function helpText(): string {
     --no-push           ${d('Do not push to the remote')}
     --no-tag            ${d('Do not create a tag')}
     --merge-request     ${d('Protected branch: open a release/<v> branch + MR (alias --mr)')}
+    --no-protection-check ${d('Push directly; skip the gh/glab protected-branch check')}
     --tag-release       ${d('Post-merge: tag the latest changelog release on HEAD, push it')}
     --tag-prefix=PREFIX ${d('Override tag-prefix auto-detection (v, none, or e.g. myapp.)')}
     --changelog=PATH    ${d('Path to the changelog file (default: CHANGELOG.md)')}

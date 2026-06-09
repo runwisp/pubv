@@ -1,3 +1,5 @@
+import type { HostInfo } from '../../src/core/host.js';
+import type { Forge } from '../../src/ports/forge.js';
 import type { Fs } from '../../src/ports/fs.js';
 import type { BranchStatus, Git, PushOptions } from '../../src/ports/git.js';
 import type { Logger, Spinner } from '../../src/ports/logger.js';
@@ -85,6 +87,17 @@ export class FakeGit implements Git {
   async pushTag(remote: string, tag: string): Promise<void> {
     this.calls.push(`pushTag:${remote}:${tag}`);
     if (this.pushShouldFail) throw new Error('fake push failure');
+  }
+}
+
+export class FakeForge implements Forge {
+  /** Value returned by `branchProtected` (default: undeterminable). */
+  result: boolean | null = null;
+  calls: string[] = [];
+
+  async branchProtected(_host: HostInfo, branch: string): Promise<boolean | null> {
+    this.calls.push(`branchProtected:${branch}`);
+    return this.result;
   }
 }
 

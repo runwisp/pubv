@@ -1,3 +1,4 @@
+import type { Forge } from '../ports/forge.js';
 import type { Fs } from '../ports/fs.js';
 import type { Git } from '../ports/git.js';
 import type { Logger } from '../ports/logger.js';
@@ -35,6 +36,8 @@ export interface ReleaseInputs {
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
   tagRelease: boolean;
+  /** Skip the forge protected-branch check and push directly (escape hatch). */
+  skipProtectionCheck: boolean;
   /** ISO date `YYYY-MM-DD` used in the new heading. Injectable for tests. */
   today: string;
   remote: string;
@@ -67,6 +70,7 @@ export interface Ports {
   fs: Fs;
   prompt: Prompt;
   log: Logger;
+  forge: Forge;
 }
 
 export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePlan> {
@@ -182,7 +186,7 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
   const fromRef = await resolveFromRef(suggestions.last, tagPrefix, git);
   const branch = await git.currentBranch();
   const defaultBranch = await git.defaultBranch();
-  const mode: ReleaseMode = inputs.mergeRequest ? 'merge-request' : 'standard';
+  const mode = await resolveMode(inputs, ports, host, branch, defaultBranch);
   const releaseBranch = mode === 'merge-request' ? `release/${tagName}` : null;
   const mrUrl =
     mode === 'merge-request' ? mergeRequestUrl(host, releaseBranch!, defaultBranch) : null;
@@ -216,6 +220,39 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
     releaseBranch,
     mrUrl,
   };
+}
+
+/**
+ * Decide whether to push directly or open a merge request. `--merge-request`
+ * forces MR mode. Otherwise, when a direct push would land on the protected
+ * default branch, we auto-switch to the MR flow so no commit/tag is made on a
+ * branch the push would be rejected from. The check only runs for that exact
+ * case (push enabled, on the default branch); anything undeterminable proceeds
+ * with a direct push, since detection is advisory and must never block.
+ */
+async function resolveMode(
+  inputs: ReleaseInputs,
+  ports: Ports,
+  host: HostInfo,
+  branch: string,
+  defaultBranch: string,
+): Promise<ReleaseMode> {
+  if (inputs.mergeRequest) return 'merge-request';
+  if (inputs.skipProtectionCheck || !inputs.push || branch !== defaultBranch) {
+    return 'standard';
+  }
+
+  const isProtected = await ports.forge.branchProtected(host, branch);
+  if (isProtected === true) {
+    ports.log.warn(`${branch} is protected on ${host.kind} — switching to merge-request workflow`);
+    return 'merge-request';
+  }
+  if (isProtected === null) {
+    ports.log.info(
+      'branch protection undetermined (no gh/glab or unsupported host) — pushing directly',
+    );
+  }
+  return 'standard';
 }
 
 function pickHost(cl: Changelog): HostInfo {
