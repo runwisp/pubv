@@ -1,4 +1,5 @@
 import pkg from '../../package.json' with { type: 'json' };
+import { createForgeCli } from '../adapters/forge-cli.js';
 import { nodeFs } from '../adapters/fs-node.js';
 import { createGitCli } from '../adapters/git-cli.js';
 import { createLogger } from '../adapters/logger-ansi.js';
@@ -36,7 +37,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     enableSpinner: isTTY && !args.yes && !process.env.CI,
   });
   const prompt = createPrompt({ input: process.stdin, output: stdout });
-  const git = createGitCli({ cwd: process.cwd() });
+  const cwd = process.cwd();
+  const git = createGitCli({ cwd });
+  const forge = createForgeCli({ cwd });
+  const envSkip = process.env.PUBV_NO_PROTECTION_CHECK;
 
   log.banner('pubv', PKG_VERSION);
 
@@ -52,10 +56,11 @@ export async function main(argv: readonly string[]): Promise<number> {
         tag: args.tag,
         mergeRequest: args.mergeRequest,
         tagRelease: args.tagRelease,
+        skipProtectionCheck: args.skipProtectionCheck || (!!envSkip && envSkip !== '0'),
         today: args.date ?? new Date().toISOString().slice(0, 10),
         remote: args.remote,
       },
-      { git, fs: nodeFs, prompt, log },
+      { git, fs: nodeFs, prompt, log, forge },
     );
     log.blank();
     return 0;

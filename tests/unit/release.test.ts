@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { PubvError } from '../../src/core/errors.js';
 import { type Ports, type ReleaseInputs, run } from '../../src/core/release.js';
-import { FakeFs, FakeGit, FakePrompt, SilentLogger } from '../helpers/fakes.js';
+import { FakeForge, FakeFs, FakeGit, FakePrompt, SilentLogger } from '../helpers/fakes.js';
 import { loadFixture } from '../helpers/fixture.js';
 
 function defaultInputs(overrides: Partial<ReleaseInputs> = {}): ReleaseInputs {
@@ -15,18 +15,26 @@ function defaultInputs(overrides: Partial<ReleaseInputs> = {}): ReleaseInputs {
     tag: true,
     mergeRequest: false,
     tagRelease: false,
+    skipProtectionCheck: false,
     today: '2026-05-25',
     remote: 'origin',
     ...overrides,
   };
 }
 
-function makePorts(): Ports & { fs: FakeFs; git: FakeGit; prompt: FakePrompt; log: SilentLogger } {
+function makePorts(): Ports & {
+  fs: FakeFs;
+  git: FakeGit;
+  prompt: FakePrompt;
+  log: SilentLogger;
+  forge: FakeForge;
+} {
   return {
     fs: new FakeFs(),
     git: new FakeGit(),
     prompt: new FakePrompt(),
     log: new SilentLogger(),
+    forge: new FakeForge(),
   };
 }
 
@@ -254,6 +262,83 @@ describe('run() — merge-request mode', () => {
     expect(ports.git.calls).toContain('switchBranch:main');
     expect(ports.git.calls.some((c) => c.startsWith('tag:'))).toBe(false);
     expect(ports.git.calls).not.toContain('push:origin:main:follow');
+  });
+});
+
+describe('run() — protected-branch auto-switch', () => {
+  let ports: ReturnType<typeof makePorts>;
+  beforeEach(() => {
+    ports = makePorts();
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    ports.git.tags = ['v1.2.0'];
+  });
+
+  test('protected default branch switches to merge-request mode', async () => {
+    ports.forge.result = true;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('merge-request');
+    expect(plan.releaseBranch).toBe('release/v1.3.0');
+    expect(plan.tag).toBe(false);
+    expect(ports.git.calls).toContain('createBranch:release/v1.3.0');
+    expect(ports.git.calls).toContain('push:origin:release/v1.3.0:upstream');
+    expect(ports.git.calls).toContain('switchBranch:main');
+    expect(ports.git.calls).not.toContain('push:origin:main:follow');
+  });
+
+  test('unprotected branch pushes directly', async () => {
+    ports.forge.result = false;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('undeterminable protection pushes directly', async () => {
+    ports.forge.result = null;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('--no-protection-check skips the check entirely', async () => {
+    ports.forge.result = true;
+
+    const plan = await run(
+      defaultInputs({ versionArg: '1.3.0', skipProtectionCheck: true }),
+      ports,
+    );
+
+    expect(ports.forge.calls).toEqual([]);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('--no-push never checks protection', async () => {
+    ports.forge.result = true;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0', push: false }), ports);
+
+    expect(ports.forge.calls).toEqual([]);
+    expect(plan.mode).toBe('standard');
+  });
+
+  test('a non-default branch is not auto-switched', async () => {
+    ports.forge.result = true;
+    ports.git.branch = 'feature/foo';
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual([]);
+    expect(plan.mode).toBe('standard');
   });
 });
 

@@ -97,6 +97,8 @@ export function runPubv(args: readonly string[], cwd: string): PubvRun {
       ...process.env,
       NO_COLOR: '1',
       CI: '1',
+      // Keep e2e hermetic: never shell out to gh/glab for protection detection.
+      PUBV_NO_PROTECTION_CHECK: '1',
       GIT_AUTHOR_NAME: 'Test User',
       GIT_AUTHOR_EMAIL: 'test@example.com',
       GIT_COMMITTER_NAME: 'Test User',

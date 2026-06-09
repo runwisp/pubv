@@ -16,6 +16,8 @@ export interface ParsedArgs {
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
   tagRelease: boolean;
+  /** Skip the forge protected-branch check and push directly (escape hatch). */
+  skipProtectionCheck: boolean;
   help: boolean;
   showVersion: boolean;
 }
@@ -33,6 +35,7 @@ export function defaultArgs(): ParsedArgs {
     tag: true,
     mergeRequest: false,
     tagRelease: false,
+    skipProtectionCheck: false,
     help: false,
     showVersion: false,
   };
@@ -103,6 +106,9 @@ function handleBool(arg: string, out: ParsedArgs): boolean {
     case '--tag-release':
     case '--tag-only':
       out.tagRelease = true;
+      return true;
+    case '--no-protection-check':
+      out.skipProtectionCheck = true;
       return true;
   }
   return false;
