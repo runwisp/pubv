@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   type HostInfo,
+  type RemoteRef,
   compareUrl,
   detectHost,
   mergeRequestUrl,
@@ -8,148 +9,136 @@ import {
 } from '../../src/core/host.js';
 
 describe('detectHost', () => {
-  test('detects github.com', () => {
-    expect(detectHost(['[1.0.0]: https://github.com/foo/bar/releases/tag/v1.0.0'])).toEqual({
-      kind: 'github',
-      base: 'https://github.com/foo/bar',
-    });
-  });
+  const cases: Array<{ name: string; lines: string[]; expected: HostInfo | null }> = [
+    {
+      name: 'detects github.com',
+      lines: ['[1.0.0]: https://github.com/foo/bar/releases/tag/v1.0.0'],
+      expected: { kind: 'github', base: 'https://github.com/foo/bar' },
+    },
+    {
+      name: 'detects gitlab.com',
+      lines: ['[1.0.0]: https://gitlab.com/foo/bar/-/tags/v1.0.0'],
+      expected: { kind: 'gitlab', base: 'https://gitlab.com/foo/bar' },
+    },
+    {
+      name: 'detects self-hosted gitlab',
+      lines: ['https://gitlab.acme.internal/foo/bar/-/tags'],
+      expected: { kind: 'gitlab', base: 'https://gitlab.acme.internal/foo/bar' },
+    },
+    {
+      // The host name says nothing about GitLab; the `/-/` separator is the tell.
+      name: 'detects self-hosted gitlab on a custom domain via the /-/ route marker',
+      lines: ['[1.0.0]: https://code.acme.com/team/app/-/tags/v1.0.0'],
+      expected: { kind: 'gitlab', base: 'https://code.acme.com/team/app' },
+    },
+    {
+      name: 'recovers the full project path for a gitlab subgroup',
+      lines: ['https://devops.example.org/group/sub/project/-/merge_requests/7'],
+      expected: { kind: 'gitlab', base: 'https://devops.example.org/group/sub/project' },
+    },
+    {
+      name: 'detects self-hosted gitlab from a compare link with no "gitlab" in the host',
+      lines: ['[Unreleased]: https://vcs.corp.io/team/app/-/compare/v1.0.0...main'],
+      expected: { kind: 'gitlab', base: 'https://vcs.corp.io/team/app' },
+    },
+    {
+      name: 'preserves a non-standard port',
+      lines: ['https://git.acme.com:8443/team/app/-/tags/v1.0.0'],
+      expected: { kind: 'gitlab', base: 'https://git.acme.com:8443/team/app' },
+    },
+    {
+      name: 'does not mistake a github resource path for the /-/ marker',
+      lines: ['https://github.com/foo/bar/releases/tag/v1.0.0'],
+      expected: { kind: 'github', base: 'https://github.com/foo/bar' },
+    },
+    {
+      name: 'detects bitbucket.org',
+      lines: ['https://bitbucket.org/foo/bar/branches/'],
+      expected: { kind: 'bitbucket', base: 'https://bitbucket.org/foo/bar' },
+    },
+    {
+      name: 'strips trailing .git from repo segment',
+      lines: ['https://github.com/foo/bar.git'],
+      expected: { kind: 'github', base: 'https://github.com/foo/bar' },
+    },
+    {
+      name: 'skips non-forge URLs',
+      lines: ['https://example.com/some/page'],
+      expected: null,
+    },
+    {
+      name: 'falls through to generic when host contains "git"',
+      lines: ['https://git.acme.internal/foo/bar'],
+      expected: { kind: 'generic', base: 'https://git.acme.internal/foo/bar' },
+    },
+    {
+      name: 'returns null on empty input',
+      lines: [],
+      expected: null,
+    },
+  ];
 
-  test('detects gitlab.com', () => {
-    expect(detectHost(['[1.0.0]: https://gitlab.com/foo/bar/-/tags/v1.0.0'])).toEqual({
-      kind: 'gitlab',
-      base: 'https://gitlab.com/foo/bar',
-    });
-  });
-
-  test('detects self-hosted gitlab', () => {
-    expect(detectHost(['https://gitlab.acme.internal/foo/bar/-/tags'])).toEqual({
-      kind: 'gitlab',
-      base: 'https://gitlab.acme.internal/foo/bar',
-    });
-  });
-
-  test('detects self-hosted gitlab on a custom domain via the /-/ route marker', () => {
-    // The host name says nothing about GitLab; the `/-/` separator is the tell.
-    expect(detectHost(['[1.0.0]: https://code.acme.com/team/app/-/tags/v1.0.0'])).toEqual({
-      kind: 'gitlab',
-      base: 'https://code.acme.com/team/app',
-    });
-  });
-
-  test('recovers the full project path for a gitlab subgroup', () => {
-    expect(detectHost(['https://devops.example.org/group/sub/project/-/merge_requests/7'])).toEqual(
-      {
-        kind: 'gitlab',
-        base: 'https://devops.example.org/group/sub/project',
-      },
-    );
-  });
-
-  test('detects self-hosted gitlab from a compare link with no "gitlab" in the host', () => {
-    expect(
-      detectHost(['[Unreleased]: https://vcs.corp.io/team/app/-/compare/v1.0.0...main']),
-    ).toEqual({
-      kind: 'gitlab',
-      base: 'https://vcs.corp.io/team/app',
-    });
-  });
-
-  test('preserves a non-standard port', () => {
-    expect(detectHost(['https://git.acme.com:8443/team/app/-/tags/v1.0.0'])).toEqual({
-      kind: 'gitlab',
-      base: 'https://git.acme.com:8443/team/app',
-    });
-  });
-
-  test('does not mistake a github resource path for the /-/ marker', () => {
-    expect(detectHost(['https://github.com/foo/bar/releases/tag/v1.0.0'])).toEqual({
-      kind: 'github',
-      base: 'https://github.com/foo/bar',
-    });
-  });
-
-  test('detects bitbucket.org', () => {
-    expect(detectHost(['https://bitbucket.org/foo/bar/branches/'])).toEqual({
-      kind: 'bitbucket',
-      base: 'https://bitbucket.org/foo/bar',
-    });
-  });
-
-  test('strips trailing .git from repo segment', () => {
-    expect(detectHost(['https://github.com/foo/bar.git'])).toEqual({
-      kind: 'github',
-      base: 'https://github.com/foo/bar',
-    });
-  });
-
-  test('skips non-forge URLs', () => {
-    expect(detectHost(['https://example.com/some/page'])).toBeNull();
-  });
-
-  test('falls through to generic when host contains "git"', () => {
-    expect(detectHost(['https://git.acme.internal/foo/bar'])).toEqual({
-      kind: 'generic',
-      base: 'https://git.acme.internal/foo/bar',
-    });
-  });
-
-  test('returns null on empty input', () => {
-    expect(detectHost([])).toBeNull();
+  test.each(cases)('$name', ({ lines, expected }) => {
+    expect(detectHost(lines)).toEqual(expected);
   });
 });
 
 describe('parseRemoteUrl', () => {
-  test('https remote → host + project path, .git stripped', () => {
-    expect(parseRemoteUrl('https://github.com/foo/bar.git')).toEqual({
-      host: 'github.com',
-      projectPath: 'foo/bar',
-    });
-  });
+  const cases: Array<{ name: string; remote: string; expected: RemoteRef | null }> = [
+    {
+      name: 'https remote → host + project path, .git stripped',
+      remote: 'https://github.com/foo/bar.git',
+      expected: { host: 'github.com', projectPath: 'foo/bar' },
+    },
+    {
+      name: 'https remote keeps a non-standard port',
+      remote: 'https://code.acme.com:8443/team/app.git',
+      expected: { host: 'code.acme.com:8443', projectPath: 'team/app' },
+    },
+    {
+      name: 'https remote drops the default port',
+      remote: 'https://code.acme.com:443/team/app',
+      expected: { host: 'code.acme.com', projectPath: 'team/app' },
+    },
+    {
+      name: 'ssh:// remote drops the ssh port (web UI is on 443)',
+      remote: 'ssh://git@code.acme.com:2222/group/sub/proj.git',
+      expected: { host: 'code.acme.com', projectPath: 'group/sub/proj' },
+    },
+    {
+      name: 'scp-style remote with a subgroup keeps the full path',
+      remote: 'git@code.acme.com:group/sub/proj.git',
+      expected: { host: 'code.acme.com', projectPath: 'group/sub/proj' },
+    },
+    {
+      name: 'file:// → null',
+      remote: 'file:///srv/git/repo.git',
+      expected: null,
+    },
+    {
+      name: 'bare local path → null',
+      remote: '/home/user/x/remote.git',
+      expected: null,
+    },
+    {
+      name: 'relative path → null',
+      remote: '../relative/repo',
+      expected: null,
+    },
+    {
+      name: 'whitespace-only remote → null',
+      remote: '   ',
+      expected: null,
+    },
+    {
+      name: 'URL with a host but no project path → null',
+      remote: 'https://github.com/',
+      expected: null,
+    },
+  ];
 
-  test('https remote keeps a non-standard port', () => {
-    expect(parseRemoteUrl('https://code.acme.com:8443/team/app.git')).toEqual({
-      host: 'code.acme.com:8443',
-      projectPath: 'team/app',
-    });
-  });
-
-  test('https remote drops the default port', () => {
-    expect(parseRemoteUrl('https://code.acme.com:443/team/app')).toEqual({
-      host: 'code.acme.com',
-      projectPath: 'team/app',
-    });
-  });
-
-  test('ssh:// remote drops the ssh port (web UI is on 443)', () => {
-    expect(parseRemoteUrl('ssh://git@code.acme.com:2222/group/sub/proj.git')).toEqual({
-      host: 'code.acme.com',
-      projectPath: 'group/sub/proj',
-    });
-  });
-
-  test('scp-style remote with a subgroup keeps the full path', () => {
-    expect(parseRemoteUrl('git@code.acme.com:group/sub/proj.git')).toEqual({
-      host: 'code.acme.com',
-      projectPath: 'group/sub/proj',
-    });
-  });
-
-  test('file:// → null', () => {
-    expect(parseRemoteUrl('file:///srv/git/repo.git')).toBeNull();
-  });
-
-  test('bare local path → null', () => {
-    expect(parseRemoteUrl('/tmp/x/remote.git')).toBeNull();
-  });
-
-  test('relative path and empty string → null', () => {
-    expect(parseRemoteUrl('../relative/repo')).toBeNull();
-    expect(parseRemoteUrl('   ')).toBeNull();
-  });
-
-  test('URL with a host but no project path → null', () => {
-    expect(parseRemoteUrl('https://github.com/')).toBeNull();
+  test.each(cases)('$name', ({ remote, expected }) => {
+    expect(parseRemoteUrl(remote)).toEqual(expected);
   });
 });
 

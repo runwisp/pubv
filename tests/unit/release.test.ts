@@ -53,6 +53,15 @@ describe('run() — happy paths', () => {
     ports = makePorts();
   });
 
+  // Shared setup for the custom-prefix cases: a changelog ready to bump plus a
+  // tag history that establishes `myapp.` as the prefix in play.
+  async function runWithCustomPrefixTags(versionArg: string) {
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
+    return run(defaultInputs({ versionArg }), ports);
+  }
+
   test('graduates a minor release end-to-end with --yes', async () => {
     const fixture = loadFixture('02-minor-added');
     ports.fs.files.set('CHANGELOG.md', fixture.input);
@@ -153,11 +162,7 @@ describe('run() — happy paths', () => {
   });
 
   test('adopts a custom prefix embedded in the version arg', async () => {
-    const fixture = loadFixture('02-minor-added');
-    ports.fs.files.set('CHANGELOG.md', fixture.input);
-    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
-
-    const plan = await run(defaultInputs({ versionArg: 'myapp.1.3.0' }), ports);
+    const plan = await runWithCustomPrefixTags('myapp.1.3.0');
 
     expect(plan.nextVersion).toBe('1.3.0');
     expect(plan.tagName).toBe('myapp.1.3.0');
@@ -167,11 +172,7 @@ describe('run() — happy paths', () => {
   });
 
   test('auto-detects a custom prefix from existing tags with a shorthand bump', async () => {
-    const fixture = loadFixture('02-minor-added');
-    ports.fs.files.set('CHANGELOG.md', fixture.input);
-    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
-
-    const plan = await run(defaultInputs({ versionArg: 'minor' }), ports);
+    const plan = await runWithCustomPrefixTags('minor');
 
     expect(plan.nextVersion).toBe('1.3.0');
     expect(plan.tagName).toBe('myapp.1.3.0');
