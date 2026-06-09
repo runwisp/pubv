@@ -46,6 +46,25 @@ describe('forgeQuery', () => {
     ]);
   });
 
+  test('self-hosted gitlab on a custom domain + port keeps the port in GITLAB_HOST', () => {
+    const q = forgeQuery(host('gitlab', 'https://code.acme.com:8443/team/app'), 'main');
+    expect(q?.env).toEqual({ GITLAB_HOST: 'code.acme.com:8443' });
+  });
+
+  test('github enterprise on a custom port keeps the port in --hostname', () => {
+    const q = forgeQuery(
+      host('github', 'https://git.enterprise.github.com:8443/acme/widget'),
+      'main',
+    );
+    expect(q?.args).toContain('git.enterprise.github.com:8443');
+  });
+
+  test('gitlab subgroup → full URL-encoded project path', () => {
+    const q = forgeQuery(host('gitlab', 'https://code.acme.com/group/sub/app'), 'main');
+    expect(q?.args[1]).toBe('projects/group%2Fsub%2Fapp/repository/branches/main');
+    expect(q?.env).toEqual({ GITLAB_HOST: 'code.acme.com' });
+  });
+
   test('branch names with slashes are encoded', () => {
     const q = forgeQuery(host('gitlab', 'https://gitlab.com/acme/widget'), 'release/1.0');
     expect(q?.args[1]).toBe('projects/acme%2Fwidget/repository/branches/release%2F1.0');

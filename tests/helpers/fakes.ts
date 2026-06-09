@@ -1,7 +1,8 @@
-import type { HostInfo } from '../../src/core/host.js';
+import type { HostInfo, HostKind } from '../../src/core/host.js';
 import type { Forge } from '../../src/ports/forge.js';
 import type { Fs } from '../../src/ports/fs.js';
 import type { BranchStatus, Git, PushOptions } from '../../src/ports/git.js';
+import type { HostProber } from '../../src/ports/host-prober.js';
 import type { Logger, Spinner } from '../../src/ports/logger.js';
 import type { Prompt, SelectOption } from '../../src/ports/prompt.js';
 
@@ -27,6 +28,8 @@ export class FakeGit implements Git {
   branch = 'main';
   defaultBranchName = 'main';
   clean = true;
+  /** `git remote get-url` result; `null` (default) → CHANGELOG host fallback. */
+  remoteUrlValue: string | null = null;
   tags: string[] = [];
   upstream: BranchStatus = { hasUpstream: true, ahead: 0, behind: 0 };
   rootCommit = 'abcdef0';
@@ -41,6 +44,10 @@ export class FakeGit implements Git {
   async currentBranch(): Promise<string> {
     this.calls.push('currentBranch');
     return this.branch;
+  }
+  async remoteUrl(remote: string): Promise<string | null> {
+    this.calls.push(`remoteUrl:${remote}`);
+    return this.remoteUrlValue;
   }
   async isClean(): Promise<boolean> {
     this.calls.push('isClean');
@@ -98,6 +105,18 @@ export class FakeForge implements Forge {
   async branchProtected(_host: HostInfo, branch: string): Promise<boolean | null> {
     this.calls.push(`branchProtected:${branch}`);
     return this.result;
+  }
+}
+
+export class FakeHostProber implements HostProber {
+  /** Value returned by `classify` (default: undeterminable → `generic`). */
+  kind: HostKind | null = null;
+  /** Hostnames passed to `classify`, in order — empty unless a probe ran. */
+  calls: string[] = [];
+
+  async classify(hostname: string): Promise<HostKind | null> {
+    this.calls.push(hostname);
+    return this.kind;
   }
 }
 

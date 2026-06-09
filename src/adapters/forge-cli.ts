@@ -34,7 +34,8 @@ export function forgeQuery(host: HostInfo, branch: string): ForgeQuery | null {
   if (segments.length < 2) return null;
   const owner = segments[0]!;
   const repo = segments[1]!;
-  const hostname = url.hostname;
+  // Keep any non-standard port: self-hosted instances aren't always on 443.
+  const hostname = url.host;
 
   switch (host.kind) {
     case 'github': {
@@ -44,7 +45,9 @@ export function forgeQuery(host: HostInfo, branch: string): ForgeQuery | null {
       return { cmd: 'gh', args };
     }
     case 'gitlab': {
-      const project = encodeURIComponent(`${owner}/${repo}`);
+      // GitLab's project id is the full, URL-encoded path — subgroups included
+      // (`group/sub/proj` → `group%2Fsub%2Fproj`), not just `owner/repo`.
+      const project = segments.map(encodeURIComponent).join('%2F');
       const path = `projects/${project}/repository/branches/${encodeURIComponent(branch)}`;
       // `glab` resolves its host from the git remote or GITLAB_HOST; set the
       // latter so self-hosted instances are targeted explicitly.

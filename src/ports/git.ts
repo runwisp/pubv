@@ -19,6 +19,8 @@ export interface Git {
   /** Best-effort default branch via `origin/HEAD`; falls back to `main`. */
   defaultBranch(): Promise<string>;
   currentBranch(): Promise<string>;
+  /** URL of the named remote (`git remote get-url`), or `null` if it has none. */
+  remoteUrl(remote: string): Promise<string | null>;
   /** True when there are no uncommitted changes (staged or unstaged). */
   isClean(): Promise<boolean>;
   fetch(remote: string): Promise<void>;
