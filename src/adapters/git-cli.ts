@@ -24,6 +24,17 @@ export function createGitCli(opts: GitCliOptions): Git {
       return (await run(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
     },
 
+    async remoteUrl(remote) {
+      try {
+        const out = (await run(['remote', 'get-url', remote])).trim();
+        return out || null;
+      } catch {
+        // No such remote, or git unavailable — the caller falls back to the
+        // CHANGELOG for host detection.
+        return null;
+      }
+    },
+
     async isClean() {
       const out = await run(['status', '--porcelain']);
       return out.trim() === '';

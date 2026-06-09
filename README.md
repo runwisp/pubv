@@ -120,6 +120,29 @@ release commit isn't on the protected branch, and a squash/rebase merge would
 leave a tag pointing at a commit that never lands there. `--tag-release` tags
 `HEAD` of the merged default branch so the tag is always correct.
 
+## Forge detection (self-hosted & custom domains)
+
+`pubv` needs to know which forge you're on to write correct compare / merge-request
+URLs and to run the protected-branch check. It figures this out in order:
+
+1. **The git remote is the source of truth.** `pubv` reads `git remote get-url <remote>`
+   (handles `https`, `ssh://`, and `git@host:group/sub/proj.git` forms) for the real
+   host and project path — subgroups and custom ports included.
+2. **Host name first.** `github.com`, `*gitlab*`, and `*bitbucket*` are recognised
+   instantly, with no network call.
+3. **HTTP fingerprint for unknown domains.** A self-hosted GitLab on a custom domain
+   (`code.acme.com`, `vcs.corp.io`, …) can't be recognised by name, so `pubv` fetches
+   its pre-login PWA manifest (`GET /-/manifest.json`) and checks for GitLab over HTTPS.
+4. **CHANGELOG fallback.** With no usable remote, `pubv` scrapes the forge URL from
+   your `CHANGELOG.md` link refs instead.
+
+The probe is **best-effort and never blocks a release**: a host that's unreachable,
+login-walled, or simply isn't a known forge falls back to a generic classification
+(GitHub-style URLs, protected-branch check skipped). It only runs for genuinely
+unknown custom domains — the common GitHub/GitLab cases never touch the network.
+Set `PUBV_NO_HOST_PROBE=1` to disable the probe entirely (mirrors
+`PUBV_NO_PROTECTION_CHECK`).
+
 ## Design
 
 Code layout:

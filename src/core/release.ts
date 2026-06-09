@@ -1,6 +1,7 @@
 import type { Forge } from '../ports/forge.js';
 import type { Fs } from '../ports/fs.js';
 import type { Git } from '../ports/git.js';
+import type { HostProber } from '../ports/host-prober.js';
 import type { Logger } from '../ports/logger.js';
 import type { Prompt } from '../ports/prompt.js';
 import {
@@ -11,7 +12,14 @@ import {
   release as transformChangelog,
 } from './changelog.js';
 import { PubvError } from './errors.js';
-import { type HostInfo, compareUrl, detectHost, mergeRequestUrl } from './host.js';
+import {
+  type HostInfo,
+  classifyHost,
+  compareUrl,
+  detectHost,
+  mergeRequestUrl,
+  parseRemoteUrl,
+} from './host.js';
 import { type TagPrefix, applyPrefix, detectPrefix, splitPrefix } from './tag-prefix.js';
 import {
   type BumpKind,
@@ -71,6 +79,7 @@ export interface Ports {
   prompt: Prompt;
   log: Logger;
   forge: Forge;
+  hostProber: HostProber;
 }
 
 export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePlan> {
@@ -161,7 +170,7 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
 
   printChanges(cl.unreleased.body, log);
 
-  const host = pickHost(cl);
+  const host = await resolveHost(cl, inputs, ports);
   const tags = await git.listTags();
   const suggestions = computeSuggestions(cl);
 
@@ -255,21 +264,45 @@ async function resolveMode(
   return 'standard';
 }
 
-function pickHost(cl: Changelog): HostInfo {
-  const lines = [
+/**
+ * Resolve the forge host, authoritatively. The git remote is the source of
+ * truth (it names the real host + project path); the CHANGELOG is only scraped
+ * when no usable remote exists. A custom domain the name heuristic can't place
+ * (`generic`) is refined by an HTTP fingerprint probe — best-effort, so a host
+ * that can't be probed simply stays `generic` and never blocks the release.
+ */
+async function resolveHost(cl: Changelog, inputs: ReleaseInputs, ports: Ports): Promise<HostInfo> {
+  const { git, hostProber } = ports;
+
+  const remote = await git.remoteUrl(inputs.remote);
+  const ref = remote ? parseRemoteUrl(remote) : null;
+  if (ref) {
+    let kind = classifyHost(ref.host);
+    if (kind === 'generic') kind = (await hostProber.classify(ref.host)) ?? 'generic';
+    return { kind, base: `https://${ref.host}/${ref.projectPath}` };
+  }
+
+  const host = detectHost(changelogLines(cl));
+  if (!host) {
+    throw new PubvError(
+      'no-host',
+      `no usable ${inputs.remote} remote and no forge URL (github / gitlab / bitbucket / *git*) found in ${inputs.changelogPath}`,
+    );
+  }
+  if (host.kind === 'generic') {
+    const probed = await hostProber.classify(new URL(host.base).host);
+    if (probed) return { ...host, kind: probed };
+  }
+  return host;
+}
+
+function changelogLines(cl: Changelog): string[] {
+  return [
     ...cl.header,
     ...(cl.unreleased?.body ?? []),
     ...cl.releases.flatMap((r) => [`## [${r.version}]`, ...r.body]),
     ...cl.links.map((l) => `[${l.name}]: ${l.url}`),
   ];
-  const host = detectHost(lines);
-  if (!host) {
-    throw new PubvError(
-      'no-host',
-      'no forge URL (github / gitlab / bitbucket / *git*) found in CHANGELOG.md',
-    );
-  }
-  return host;
 }
 
 interface VersionSuggestions {
@@ -569,6 +602,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
   log.kv('tag', tagName);
   log.kv('commit', commitMessage, 'on current HEAD');
 
+  const host = await resolveHost(cl, inputs, ports);
   const plan: ReleasePlan = {
     changelogPath: inputs.changelogPath,
     branch: await git.currentBranch(),
@@ -578,7 +612,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
     date: inputs.today,
     entries: [...last.body],
     newChangelog: serialize(cl),
-    host: pickHost(cl),
+    host,
     push: inputs.push,
     tag: true,
     mode: 'standard',
