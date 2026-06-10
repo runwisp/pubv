@@ -2,6 +2,8 @@ export type PubvErrorCode =
   | 'no-changelog'
   | 'no-unreleased'
   | 'no-release'
+  | 'empty-release'
+  | 'changelog-exists'
   | 'tag-exists'
   | 'no-host'
   | 'invalid-version'

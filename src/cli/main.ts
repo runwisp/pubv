@@ -6,7 +6,7 @@ import { createHttpHostProber } from '../adapters/host-prober-http.js';
 import { createLogger } from '../adapters/logger-ansi.js';
 import { createPrompt } from '../adapters/prompt-readline.js';
 import { PubvError } from '../core/errors.js';
-import { run as runRelease } from '../core/release.js';
+import { runInit, run as runRelease } from '../core/release.js';
 import type { HostProber } from '../ports/host-prober.js';
 import { parseArgs } from './args.js';
 import { helpText } from './help.js';
@@ -47,24 +47,31 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   log.banner('pubv', PKG_VERSION);
 
+  const inputs = {
+    changelogPath: args.changelogPath,
+    versionArg: args.version,
+    tagPrefixOverride: args.tagPrefix,
+    yes: args.yes,
+    dryRun: args.dryRun,
+    push: args.push,
+    tag: args.tag,
+    sign: args.sign,
+    release: args.release,
+    allowEmpty: args.allowEmpty,
+    mergeRequest: args.mergeRequest,
+    tagRelease: args.tagRelease,
+    skipProtectionCheck: args.skipProtectionCheck || (!!envSkip && envSkip !== '0'),
+    today: args.date ?? new Date().toISOString().slice(0, 10),
+    remote: args.remote,
+  };
+  const ports = { git, fs: nodeFs, prompt, log, forge, hostProber };
+
   try {
-    await runRelease(
-      {
-        changelogPath: args.changelogPath,
-        versionArg: args.version,
-        tagPrefixOverride: args.tagPrefix,
-        yes: args.yes,
-        dryRun: args.dryRun,
-        push: args.push,
-        tag: args.tag,
-        mergeRequest: args.mergeRequest,
-        tagRelease: args.tagRelease,
-        skipProtectionCheck: args.skipProtectionCheck || (!!envSkip && envSkip !== '0'),
-        today: args.date ?? new Date().toISOString().slice(0, 10),
-        remote: args.remote,
-      },
-      { git, fs: nodeFs, prompt, log, forge, hostProber },
-    );
+    if (args.init) {
+      await runInit(inputs, ports);
+    } else {
+      await runRelease(inputs, ports);
+    }
     log.blank();
     return 0;
   } catch (err) {

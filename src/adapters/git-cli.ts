@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { PubvError } from '../core/errors.js';
-import type { BranchStatus, Git, PushOptions } from '../ports/git.js';
+import type { BranchStatus, Git, PushOptions, SignOptions } from '../ports/git.js';
 
 export interface GitCliOptions {
   cwd: string;
@@ -76,12 +76,16 @@ export function createGitCli(opts: GitCliOptions): Git {
       await run(['add', '--', path]);
     },
 
-    async commit(message) {
-      await run(['commit', '-m', message]);
+    async commit(message, options?: SignOptions) {
+      const args = ['commit'];
+      if (options?.sign) args.push('-S');
+      args.push('-m', message);
+      await run(args);
     },
 
-    async tag(name, message) {
-      await run(['tag', '-a', name, '-m', message]);
+    async tag(name, message, options?: SignOptions) {
+      // `-s` produces a signed annotated tag; `-a` an unsigned annotated tag.
+      await run(['tag', options?.sign ? '-s' : '-a', name, '-m', message]);
     },
 
     async push(remote, branch, options: PushOptions) {

@@ -51,6 +51,30 @@ describe('parseArgs', () => {
     expect(parseArgs(['--tag-only'])).toMatchObject({ tagRelease: true });
   });
 
+  test('parses --sign, --release, and --allow-empty', () => {
+    expect(parseArgs(['--sign'])).toMatchObject({ sign: true });
+    expect(parseArgs(['--release'])).toMatchObject({ release: true });
+    expect(parseArgs(['--allow-empty'])).toMatchObject({ allowEmpty: true });
+  });
+
+  test('parses the init command', () => {
+    expect(parseArgs(['init'])).toMatchObject({ init: true, version: null });
+  });
+
+  test('rejects --release with --no-tag or --no-push', () => {
+    expect(() => parseArgs(['--release', '--no-tag'])).toThrow(PubvError);
+    expect(() => parseArgs(['--release', '--no-push'])).toThrow(PubvError);
+  });
+
+  test('rejects --release with --merge-request', () => {
+    expect(() => parseArgs(['--release', '--merge-request'])).toThrow(PubvError);
+  });
+
+  test('rejects init combined with --merge-request/--tag-release', () => {
+    expect(() => parseArgs(['init', '--merge-request'])).toThrow(PubvError);
+    expect(() => parseArgs(['init', '--tag-release'])).toThrow(PubvError);
+  });
+
   test('rejects --merge-request together with --tag-release', () => {
     expect(() => parseArgs(['--merge-request', '--tag-release'])).toThrow(PubvError);
   });

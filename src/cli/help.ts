@@ -8,6 +8,7 @@ export function helpText(): string {
 
   ${b('Usage')}
     pubv ${d('[version]')} ${d('[flags]')}
+    pubv init ${d('             Scaffold a new CHANGELOG.md and exit')}
 
   ${b('Arguments')}
     version             ${d('[prefix]x.y.z[-tag]')} or one of ${d('major|minor|patch|pre')}
@@ -18,6 +19,9 @@ export function helpText(): string {
     -y, --yes           ${d('Skip all confirmations (for CI)')}
     --no-push           ${d('Do not push to the remote')}
     --no-tag            ${d('Do not create a tag')}
+    --sign              ${d('Sign the release commit and tag (git -S / -s)')}
+    --release           ${d('Create a forge release via gh/glab after pushing')}
+    --allow-empty       ${d('Allow graduating an empty [Unreleased] section')}
     --merge-request     ${d('Protected branch: open a release/<v> branch + MR (alias --mr)')}
     --no-protection-check ${d('Push directly; skip the gh/glab protected-branch check')}
     --tag-release       ${d('Post-merge: tag the latest changelog release on HEAD, push it')}

@@ -20,6 +20,7 @@ import {
   mergeRequestUrl,
   parseRemoteUrl,
 } from './host.js';
+import { buildScaffold } from './init.js';
 import { type TagPrefix, applyPrefix, detectPrefix, splitPrefix } from './tag-prefix.js';
 import {
   type BumpKind,
@@ -40,6 +41,12 @@ export interface ReleaseInputs {
   dryRun: boolean;
   push: boolean;
   tag: boolean;
+  /** Sign the release commit and tag. */
+  sign: boolean;
+  /** Create a forge release (via `gh` / `glab`) after pushing the tag. */
+  release: boolean;
+  /** Allow graduating an empty `[Unreleased]` section. */
+  allowEmpty: boolean;
   /** Open a release branch + merge request instead of pushing the default branch. */
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
@@ -71,6 +78,8 @@ export interface ReleasePlan {
   releaseBranch: string | null;
   /** "Create merge request" URL printed in merge-request mode; `null` otherwise. */
   mrUrl: string | null;
+  /** True when the changelog did not exist and is being scaffolded this run. */
+  createChangelog: boolean;
 }
 
 export interface Ports {
@@ -85,8 +94,8 @@ export interface Ports {
 export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePlan> {
   if (inputs.tagRelease) return runTagRelease(inputs, ports);
 
-  await preflight(inputs, ports);
-  const plan = await buildPlan(inputs, ports);
+  const scaffold = await preflight(inputs, ports);
+  const plan = await buildPlan(inputs, ports, scaffold);
   printPlan(plan, ports.log);
 
   if (inputs.dryRun) {
@@ -95,7 +104,7 @@ export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleaseP
     return plan;
   }
 
-  if (!inputs.yes && !(await confirm(ports, plan))) {
+  if (!inputs.yes && !(await confirm(ports, plan, inputs))) {
     throw new PubvError('user-aborted', 'aborted by user');
   }
 
@@ -105,14 +114,16 @@ export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleaseP
 
 // ─── preflight ─────────────────────────────────────────────────────────────
 
-async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<void> {
+async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<boolean> {
   const { fs, git, log, prompt } = ports;
 
-  if (!(await fs.exists(inputs.changelogPath))) {
-    throw new PubvError('no-changelog', `${inputs.changelogPath} does not exist`);
-  }
+  const scaffold = !(await fs.exists(inputs.changelogPath));
 
   log.section('preflight');
+
+  if (scaffold) {
+    log.warn(`${inputs.changelogPath} not found — a new one will be created`);
+  }
 
   const defaultBranch = await git.defaultBranch();
   const currentBranch = await git.currentBranch();
@@ -152,19 +163,37 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<void> {
     );
   }
   log.ok(status.hasUpstream ? `${inputs.remote} up-to-date` : 'no upstream tracking branch');
+
+  return scaffold;
 }
 
 // ─── plan ──────────────────────────────────────────────────────────────────
 
-async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePlan> {
+async function buildPlan(
+  inputs: ReleaseInputs,
+  ports: Ports,
+  scaffold: boolean,
+): Promise<ReleasePlan> {
   const { fs, git, log, prompt } = ports;
 
-  const source = await fs.read(inputs.changelogPath);
+  const source = scaffold
+    ? buildScaffold({ repoUrl: await git.remoteUrl(inputs.remote) })
+    : await fs.read(inputs.changelogPath);
   const cl = parse(source);
   if (!cl.unreleased) {
     throw new PubvError(
       'no-unreleased',
       `${inputs.changelogPath} has no [Unreleased] section to graduate`,
+    );
+  }
+
+  // A fresh scaffold always graduates an empty [Unreleased] (the bootstrap
+  // first release); only an existing changelog is held to the empty-guard.
+  const hasEntries = cl.unreleased.body.some((line) => line.trim() !== '');
+  if (!hasEntries && !inputs.allowEmpty && !scaffold) {
+    throw new PubvError(
+      'empty-release',
+      `${inputs.changelogPath} has no entries under [Unreleased] — add entries or pass --allow-empty`,
     );
   }
 
@@ -228,6 +257,7 @@ async function buildPlan(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePl
     mode,
     releaseBranch,
     mrUrl,
+    createChangelog: scaffold,
   };
 }
 
@@ -480,20 +510,21 @@ function printPlan(plan: ReleasePlan, log: Logger): void {
   }
 }
 
-async function confirm(ports: Ports, plan: ReleasePlan): Promise<boolean> {
+async function confirm(ports: Ports, plan: ReleasePlan, inputs: ReleaseInputs): Promise<boolean> {
   ports.log.section('confirm');
-  const actions: string[] = [`write ${plan.changelogPath}`];
+  const actions: string[] = [`${plan.createChangelog ? 'create' : 'write'} ${plan.changelogPath}`];
   if (plan.mode === 'merge-request' && plan.releaseBranch) {
     actions.push(
       `branch ${plan.releaseBranch}`,
-      `commit ${plan.commitMessage}`,
+      `commit ${plan.commitMessage}${inputs.sign ? ' (signed)' : ''}`,
       'push branch',
       'open merge request',
     );
   } else {
-    actions.push(`commit ${plan.commitMessage}`);
-    if (plan.tag) actions.push(`tag ${plan.tagName}`);
+    actions.push(`commit ${plan.commitMessage}${inputs.sign ? ' (signed)' : ''}`);
+    if (plan.tag) actions.push(`tag ${plan.tagName}${inputs.sign ? ' (signed)' : ''}`);
     if (plan.push) actions.push('push origin (with --follow-tags)');
+    if (inputs.release && plan.tag && plan.push) actions.push(`create ${plan.host.kind} release`);
   }
   ports.log.info(actions.join(' → '));
   return await ports.prompt.confirm('proceed?', true);
@@ -512,11 +543,11 @@ async function applyPlan(plan: ReleasePlan, inputs: ReleaseInputs, ports: Ports)
   log.ok(`updated ${plan.changelogPath}`);
 
   await git.stage(plan.changelogPath);
-  await git.commit(plan.commitMessage);
+  await git.commit(plan.commitMessage, { sign: inputs.sign });
   log.ok(`committed ${plan.commitMessage}`);
 
   if (plan.tag) {
-    await git.tag(plan.tagName, plan.commitMessage);
+    await git.tag(plan.tagName, plan.commitMessage, { sign: inputs.sign });
     log.ok(`tagged ${plan.tagName}`);
   }
 
@@ -529,6 +560,34 @@ async function applyPlan(plan: ReleasePlan, inputs: ReleaseInputs, ports: Ports)
       spinner.fail('push failed');
       throw err;
     }
+  }
+
+  if (inputs.release && plan.tag && plan.push) {
+    await createForgeRelease(plan, ports);
+  }
+}
+
+// ─── forge release ───────────────────────────────────────────────────────────
+
+/**
+ * Best-effort: create a release page on the forge. The tag is already pushed by
+ * the time this runs, so a missing CLI or a failed call only warns — it never
+ * aborts the release.
+ */
+async function createForgeRelease(plan: ReleasePlan, ports: Ports): Promise<void> {
+  const { forge, log } = ports;
+  const spinner = log.spinner(`creating ${plan.host.kind} release`);
+  const result = await forge.createRelease({
+    host: plan.host,
+    tag: plan.tagName,
+    title: plan.tagName,
+    notes: plan.entries.join('\n'),
+  });
+  if (result.created) {
+    spinner.succeed(result.url ? `release created: ${result.url}` : 'release created');
+  } else {
+    spinner.stop();
+    log.warn(`release not created (${result.reason ?? 'unknown'})`);
   }
 }
 
@@ -548,7 +607,7 @@ async function applyMergeRequest(
   log.ok(`updated ${plan.changelogPath}`);
 
   await git.stage(plan.changelogPath);
-  await git.commit(plan.commitMessage);
+  await git.commit(plan.commitMessage, { sign: inputs.sign });
   log.ok(`committed ${plan.commitMessage}`);
 
   const spinner = log.spinner(`pushing ${releaseBranch} to ${inputs.remote}`);
@@ -618,6 +677,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
     mode: 'standard',
     releaseBranch: null,
     mrUrl: null,
+    createChangelog: false,
   };
 
   if (inputs.dryRun) {
@@ -631,7 +691,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
   }
 
   log.section('release');
-  await git.tag(tagName, commitMessage);
+  await git.tag(tagName, commitMessage, { sign: inputs.sign });
   log.ok(`tagged ${tagName}`);
 
   if (inputs.push) {
@@ -643,7 +703,40 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
       spinner.fail('push failed');
       throw err;
     }
+
+    if (inputs.release) await createForgeRelease(plan, ports);
   }
 
   return plan;
+}
+
+// ─── init (scaffold) ─────────────────────────────────────────────────────────
+
+/**
+ * Scaffold a fresh Keep a Changelog file and stop. Unlike the auto-scaffold
+ * baked into `run`, this writes the empty template for the user to fill in —
+ * no release is cut. Errors if the changelog already exists.
+ */
+export async function runInit(inputs: ReleaseInputs, ports: Ports): Promise<void> {
+  const { fs, git, log } = ports;
+
+  if (await fs.exists(inputs.changelogPath)) {
+    throw new PubvError('changelog-exists', `${inputs.changelogPath} already exists`);
+  }
+
+  const repoUrl = await git.remoteUrl(inputs.remote);
+  const content = buildScaffold({ repoUrl });
+
+  log.section('init');
+  if (inputs.dryRun) {
+    log.info(`would create ${inputs.changelogPath}`);
+    return;
+  }
+
+  await fs.write(inputs.changelogPath, content);
+  log.ok(`created ${inputs.changelogPath}`);
+  if (!repoUrl) {
+    log.warn('no remote URL detected — add a forge URL before releasing');
+  }
+  log.info('next: add entries under [Unreleased], then run `pubv`');
 }

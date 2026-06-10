@@ -12,10 +12,18 @@ export interface ParsedArgs {
   dryRun: boolean;
   push: boolean;
   tag: boolean;
+  /** Sign the release commit and tag (`git commit -S` / `git tag -s`). */
+  sign: boolean;
+  /** Create a forge release (via `gh` / `glab`) after pushing the tag. */
+  release: boolean;
+  /** Allow graduating an empty `[Unreleased]` section. */
+  allowEmpty: boolean;
   /** Open a release branch + merge request instead of pushing the default branch. */
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
   tagRelease: boolean;
+  /** Scaffold a new changelog and exit (the `init` command). */
+  init: boolean;
   /** Skip the forge protected-branch check and push directly (escape hatch). */
   skipProtectionCheck: boolean;
   help: boolean;
@@ -33,8 +41,12 @@ export function defaultArgs(): ParsedArgs {
     dryRun: false,
     push: true,
     tag: true,
+    sign: false,
+    release: false,
+    allowEmpty: false,
     mergeRequest: false,
     tagRelease: false,
+    init: false,
     skipProtectionCheck: false,
     help: false,
     showVersion: false,
@@ -62,7 +74,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     positional = setPositional(positional, arg);
   }
-  out.version = positional;
+  if (positional === 'init') {
+    out.init = true;
+  } else {
+    out.version = positional;
+  }
   validate(out);
   return out;
 }
@@ -73,6 +89,24 @@ function validate(out: ParsedArgs): void {
   }
   if (out.mergeRequest && !out.push) {
     throw new PubvError('invalid-flag', '--merge-request pushes a branch; remove --no-push');
+  }
+  if (out.init && (out.mergeRequest || out.tagRelease)) {
+    throw new PubvError(
+      'invalid-flag',
+      'init cannot be combined with --merge-request/--tag-release',
+    );
+  }
+  if (out.release && !out.tag) {
+    throw new PubvError('invalid-flag', '--release needs a tag; remove --no-tag');
+  }
+  if (out.release && !out.push) {
+    throw new PubvError('invalid-flag', '--release needs a pushed tag; remove --no-push');
+  }
+  if (out.release && out.mergeRequest) {
+    throw new PubvError(
+      'invalid-flag',
+      '--release has no tag in merge-request mode; pass --release on the --tag-release step',
+    );
   }
 }
 
@@ -98,6 +132,15 @@ function handleBool(arg: string, out: ParsedArgs): boolean {
       return true;
     case '--no-tag':
       out.tag = false;
+      return true;
+    case '--sign':
+      out.sign = true;
+      return true;
+    case '--release':
+      out.release = true;
+      return true;
+    case '--allow-empty':
+      out.allowEmpty = true;
       return true;
     case '--merge-request':
     case '--mr':
