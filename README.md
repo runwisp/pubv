@@ -48,7 +48,14 @@ pubv 1.3.0         # explicit version
 pubv minor         # shorthand: bump minor based on last release
 pubv --dry-run     # print the plan; don't change anything
 pubv --yes 1.3.0   # CI mode: no prompts, exit non-zero on any issue
+pubv --release     # also create a GitHub/GitLab release (via gh/glab)
+pubv init          # scaffold a CHANGELOG.md and stop
 ```
+
+No `CHANGELOG.md` yet? Just run `pubv` — it offers to create one (canonical
+Keep a Changelog header) as part of the normal confirmation and cuts your first
+release from it. Prefer to write the changelog by hand first? `pubv init`
+scaffolds the file without releasing.
 
 ## What it does
 
@@ -58,6 +65,27 @@ pubv --yes 1.3.0   # CI mode: no prompts, exit non-zero on any issue
 4. **Commit + tag + push** — `git commit -m v<version>`, `git tag -a <prefix><version>`, `git push --follow-tags origin <branch>`.
 
 If anything fails or you say no at any prompt, `CHANGELOG.md` is left untouched.
+
+## Create a forge release
+
+`pubv --release` goes one step past the tag: after pushing, it opens a
+**GitHub/GitLab release** with the freshly-graduated `[Unreleased]` entries as
+the notes. It shells out to the forge CLI you already have — [`gh`] for GitHub,
+[`glab`] for GitLab — exactly as it shells out to `git`. No extra dependency, no
+token plumbing in `pubv` itself (the CLI handles auth).
+
+If the CLI isn't installed, isn't authenticated, or the host has no release CLI
+(Bitbucket), `pubv` warns and moves on — the tag is already pushed, so a missing
+release page never fails the run.
+
+[`gh`]: https://cli.github.com/
+[`glab`]: https://gitlab.com/gitlab-org/cli
+
+## Signing
+
+`pubv --sign` signs the release commit and tag (`git commit -S` / `git tag -s`),
+for repos or orgs that require GPG-signed releases. It uses your existing git
+signing configuration.
 
 ## Heuristic for the default bump
 
@@ -77,11 +105,15 @@ You can always override on the prompt or via `pubv major | minor | patch | pre |
 
 ```
 pubv [version] [flags]
+pubv init             Scaffold a new CHANGELOG.md and exit.
 
   --dry-run           Show the plan; don't change anything.
   -y, --yes           Skip all confirmations (suitable for CI).
   --no-push           Don't push to the remote.
   --no-tag            Don't create a tag.
+  --sign              Sign the release commit and tag (git commit -S / tag -s).
+  --release           Create a forge release via gh/glab after pushing the tag.
+  --allow-empty       Allow graduating an empty [Unreleased] section.
   --merge-request,--mr Protected branch: commit on a release/<version> branch,
                       push it, and print a "create merge request" URL (no tag).
   --tag-release       Post-merge step: tag the latest changelog release on HEAD

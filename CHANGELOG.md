@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--release` creates a GitHub/GitLab release after pushing the tag, using the graduated `[Unreleased]` entries as the notes. Shells out to `gh`/`glab`; a missing or unsupported CLI is warned and skipped without failing the run (the tag is already pushed).
+- `--sign` produces a signed release commit and tag (`git commit -S` / `git tag -s`).
+- `pubv` now auto-creates a `CHANGELOG.md` when none exists, folded into the existing confirmation flow, and cuts the first release (`0.1.0`) from it.
+- `pubv init` scaffolds a fresh Keep a Changelog file (without releasing) for projects that want to start by hand.
+- `--allow-empty` opt-in; otherwise graduating an empty `[Unreleased]` section is now refused instead of silently shipping an empty release.
+
 ## [1.1.0] - 2026-06-08
 
 ### Added

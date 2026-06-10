@@ -1,10 +1,11 @@
 import pkg from '../../package.json' with { type: 'json' };
+import { createForgeCli } from '../adapters/forge-cli.js';
 import { nodeFs } from '../adapters/fs-node.js';
 import { createGitCli } from '../adapters/git-cli.js';
 import { createLogger } from '../adapters/logger-ansi.js';
 import { createPrompt } from '../adapters/prompt-readline.js';
 import { PubvError } from '../core/errors.js';
-import { run as runRelease } from '../core/release.js';
+import { runInit, run as runRelease } from '../core/release.js';
 import { parseArgs } from './args.js';
 import { helpText } from './help.js';
 
@@ -36,27 +37,36 @@ export async function main(argv: readonly string[]): Promise<number> {
     enableSpinner: isTTY && !args.yes && !process.env.CI,
   });
   const prompt = createPrompt({ input: process.stdin, output: stdout });
-  const git = createGitCli({ cwd: process.cwd() });
+  const cwd = process.cwd();
+  const git = createGitCli({ cwd });
+  const forge = createForgeCli({ cwd });
 
   log.banner('pubv', PKG_VERSION);
 
+  const inputs = {
+    changelogPath: args.changelogPath,
+    versionArg: args.version,
+    tagPrefixOverride: args.tagPrefix,
+    yes: args.yes,
+    dryRun: args.dryRun,
+    push: args.push,
+    tag: args.tag,
+    sign: args.sign,
+    release: args.release,
+    allowEmpty: args.allowEmpty,
+    mergeRequest: args.mergeRequest,
+    tagRelease: args.tagRelease,
+    today: args.date ?? new Date().toISOString().slice(0, 10),
+    remote: args.remote,
+  };
+  const ports = { git, fs: nodeFs, prompt, log, forge };
+
   try {
-    await runRelease(
-      {
-        changelogPath: args.changelogPath,
-        versionArg: args.version,
-        tagPrefixOverride: args.tagPrefix,
-        yes: args.yes,
-        dryRun: args.dryRun,
-        push: args.push,
-        tag: args.tag,
-        mergeRequest: args.mergeRequest,
-        tagRelease: args.tagRelease,
-        today: args.date ?? new Date().toISOString().slice(0, 10),
-        remote: args.remote,
-      },
-      { git, fs: nodeFs, prompt, log },
-    );
+    if (args.init) {
+      await runInit(inputs, ports);
+    } else {
+      await runRelease(inputs, ports);
+    }
     log.blank();
     return 0;
   } catch (err) {

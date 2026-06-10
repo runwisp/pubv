@@ -1,5 +1,6 @@
+import type { Forge, ReleaseRequest, ReleaseResult } from '../../src/ports/forge.js';
 import type { Fs } from '../../src/ports/fs.js';
-import type { BranchStatus, Git, PushOptions } from '../../src/ports/git.js';
+import type { BranchStatus, Git, PushOptions, SignOptions } from '../../src/ports/git.js';
 import type { Logger, Spinner } from '../../src/ports/logger.js';
 import type { Prompt, SelectOption } from '../../src/ports/prompt.js';
 
@@ -28,6 +29,7 @@ export class FakeGit implements Git {
   tags: string[] = [];
   upstream: BranchStatus = { hasUpstream: true, ahead: 0, behind: 0 };
   rootCommit = 'abcdef0';
+  remote: string | null = 'https://github.com/owner/repo';
   fetchShouldFail = false;
   pushShouldFail = false;
   calls: string[] = [];
@@ -60,14 +62,18 @@ export class FakeGit implements Git {
     this.calls.push('firstCommit');
     return this.rootCommit;
   }
+  async remoteUrl(remote: string): Promise<string | null> {
+    this.calls.push(`remoteUrl:${remote}`);
+    return this.remote;
+  }
   async stage(path: string): Promise<void> {
     this.calls.push(`stage:${path}`);
   }
-  async commit(message: string): Promise<void> {
-    this.calls.push(`commit:${message}`);
+  async commit(message: string, options?: SignOptions): Promise<void> {
+    this.calls.push(`commit:${message}${options?.sign ? ':signed' : ''}`);
   }
-  async tag(name: string, message: string): Promise<void> {
-    this.calls.push(`tag:${name}:${message}`);
+  async tag(name: string, message: string, options?: SignOptions): Promise<void> {
+    this.calls.push(`tag:${name}:${message}${options?.sign ? ':signed' : ''}`);
   }
   async push(remote: string, branch: string, options: PushOptions): Promise<void> {
     const flag = options.followTags ? 'follow' : options.setUpstream ? 'upstream' : 'plain';
@@ -85,6 +91,17 @@ export class FakeGit implements Git {
   async pushTag(remote: string, tag: string): Promise<void> {
     this.calls.push(`pushTag:${remote}:${tag}`);
     if (this.pushShouldFail) throw new Error('fake push failure');
+  }
+}
+
+export class FakeForge implements Forge {
+  requests: ReleaseRequest[] = [];
+  /** Result returned from `createRelease`; default is a successful creation. */
+  result: ReleaseResult = { created: true, url: 'https://github.com/owner/repo/releases/v1.0.0' };
+
+  async createRelease(req: ReleaseRequest): Promise<ReleaseResult> {
+    this.requests.push(req);
+    return this.result;
   }
 }
 
