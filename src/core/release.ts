@@ -1,6 +1,7 @@
 import type { Forge } from '../ports/forge.js';
 import type { Fs } from '../ports/fs.js';
 import type { Git } from '../ports/git.js';
+import type { HostProber } from '../ports/host-prober.js';
 import type { Logger } from '../ports/logger.js';
 import type { Prompt } from '../ports/prompt.js';
 import {
@@ -11,7 +12,14 @@ import {
   release as transformChangelog,
 } from './changelog.js';
 import { PubvError } from './errors.js';
-import { type HostInfo, compareUrl, detectHost, mergeRequestUrl } from './host.js';
+import {
+  type HostInfo,
+  classifyHost,
+  compareUrl,
+  detectHost,
+  mergeRequestUrl,
+  parseRemoteUrl,
+} from './host.js';
 import { buildScaffold } from './init.js';
 import { type TagPrefix, applyPrefix, detectPrefix, splitPrefix } from './tag-prefix.js';
 import {
@@ -43,6 +51,8 @@ export interface ReleaseInputs {
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
   tagRelease: boolean;
+  /** Skip the forge protected-branch check and push directly (escape hatch). */
+  skipProtectionCheck: boolean;
   /** ISO date `YYYY-MM-DD` used in the new heading. Injectable for tests. */
   today: string;
   remote: string;
@@ -78,6 +88,7 @@ export interface Ports {
   prompt: Prompt;
   log: Logger;
   forge: Forge;
+  hostProber: HostProber;
 }
 
 export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePlan> {
@@ -188,7 +199,7 @@ async function buildPlan(
 
   printChanges(cl.unreleased.body, log);
 
-  const host = pickHost(cl);
+  const host = await resolveHost(cl, inputs, ports);
   const tags = await git.listTags();
   const suggestions = computeSuggestions(cl);
 
@@ -213,7 +224,7 @@ async function buildPlan(
   const fromRef = await resolveFromRef(suggestions.last, tagPrefix, git);
   const branch = await git.currentBranch();
   const defaultBranch = await git.defaultBranch();
-  const mode: ReleaseMode = inputs.mergeRequest ? 'merge-request' : 'standard';
+  const mode = await resolveMode(inputs, ports, host, branch, defaultBranch);
   const releaseBranch = mode === 'merge-request' ? `release/${tagName}` : null;
   const mrUrl =
     mode === 'merge-request' ? mergeRequestUrl(host, releaseBranch!, defaultBranch) : null;
@@ -250,21 +261,78 @@ async function buildPlan(
   };
 }
 
-function pickHost(cl: Changelog): HostInfo {
-  const lines = [
+/**
+ * Decide whether to push directly or open a merge request. `--merge-request`
+ * forces MR mode. Otherwise, when a direct push would land on the protected
+ * default branch, we auto-switch to the MR flow so no commit/tag is made on a
+ * branch the push would be rejected from. The check only runs for that exact
+ * case (push enabled, on the default branch); anything undeterminable proceeds
+ * with a direct push, since detection is advisory and must never block.
+ */
+async function resolveMode(
+  inputs: ReleaseInputs,
+  ports: Ports,
+  host: HostInfo,
+  branch: string,
+  defaultBranch: string,
+): Promise<ReleaseMode> {
+  if (inputs.mergeRequest) return 'merge-request';
+  if (inputs.skipProtectionCheck || !inputs.push || branch !== defaultBranch) {
+    return 'standard';
+  }
+
+  const isProtected = await ports.forge.branchProtected(host, branch);
+  if (isProtected === true) {
+    ports.log.warn(`${branch} is protected on ${host.kind} — switching to merge-request workflow`);
+    return 'merge-request';
+  }
+  if (isProtected === null) {
+    ports.log.info(
+      'branch protection undetermined (no gh/glab or unsupported host) — pushing directly',
+    );
+  }
+  return 'standard';
+}
+
+/**
+ * Resolve the forge host, authoritatively. The git remote is the source of
+ * truth (it names the real host + project path); the CHANGELOG is only scraped
+ * when no usable remote exists. A custom domain the name heuristic can't place
+ * (`generic`) is refined by an HTTP fingerprint probe — best-effort, so a host
+ * that can't be probed simply stays `generic` and never blocks the release.
+ */
+async function resolveHost(cl: Changelog, inputs: ReleaseInputs, ports: Ports): Promise<HostInfo> {
+  const { git, hostProber } = ports;
+
+  const remote = await git.remoteUrl(inputs.remote);
+  const ref = remote ? parseRemoteUrl(remote) : null;
+  if (ref) {
+    let kind = classifyHost(ref.host);
+    if (kind === 'generic') kind = (await hostProber.classify(ref.host)) ?? 'generic';
+    return { kind, base: `https://${ref.host}/${ref.projectPath}` };
+  }
+
+  const host = detectHost(changelogLines(cl));
+  if (!host) {
+    throw new PubvError(
+      'no-host',
+      `no usable ${inputs.remote} remote and no forge URL (github / gitlab / bitbucket / *git*) found in ${inputs.changelogPath}`,
+    );
+  }
+  if (host.kind === 'generic') {
+    const probed = await hostProber.classify(new URL(host.base).host);
+    if (probed) return { ...host, kind: probed };
+  }
+  return host;
+}
+
+function changelogLines(cl: Changelog): string[] {
+  return [
     ...cl.header,
     ...(cl.unreleased?.body ?? []),
     ...cl.releases.flatMap((r) => [`## [${r.version}]`, ...r.body]),
     ...cl.links.map((l) => `[${l.name}]: ${l.url}`),
   ];
-  const host = detectHost(lines);
-  if (!host) {
-    throw new PubvError(
-      'no-host',
-      'no forge URL (github / gitlab / bitbucket / *git*) found in CHANGELOG.md',
-    );
-  }
-  return host;
 }
 
 interface VersionSuggestions {
@@ -593,6 +661,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
   log.kv('tag', tagName);
   log.kv('commit', commitMessage, 'on current HEAD');
 
+  const host = await resolveHost(cl, inputs, ports);
   const plan: ReleasePlan = {
     changelogPath: inputs.changelogPath,
     branch: await git.currentBranch(),
@@ -602,7 +671,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
     date: inputs.today,
     entries: [...last.body],
     newChangelog: serialize(cl),
-    host: pickHost(cl),
+    host,
     push: inputs.push,
     tag: true,
     mode: 'standard',

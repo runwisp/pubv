@@ -24,6 +24,8 @@ export interface ParsedArgs {
   tagRelease: boolean;
   /** Scaffold a new changelog and exit (the `init` command). */
   init: boolean;
+  /** Skip the forge protected-branch check and push directly (escape hatch). */
+  skipProtectionCheck: boolean;
   help: boolean;
   showVersion: boolean;
 }
@@ -45,6 +47,7 @@ export function defaultArgs(): ParsedArgs {
     mergeRequest: false,
     tagRelease: false,
     init: false,
+    skipProtectionCheck: false,
     help: false,
     showVersion: false,
   };
@@ -146,6 +149,9 @@ function handleBool(arg: string, out: ParsedArgs): boolean {
     case '--tag-release':
     case '--tag-only':
       out.tagRelease = true;
+      return true;
+    case '--no-protection-check':
+      out.skipProtectionCheck = true;
       return true;
   }
   return false;

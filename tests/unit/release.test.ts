@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { PubvError } from '../../src/core/errors.js';
 import { type Ports, type ReleaseInputs, run, runInit } from '../../src/core/release.js';
-import { FakeForge, FakeFs, FakeGit, FakePrompt, SilentLogger } from '../helpers/fakes.js';
+import {
+  FakeForge,
+  FakeFs,
+  FakeGit,
+  FakeHostProber,
+  FakePrompt,
+  SilentLogger,
+} from '../helpers/fakes.js';
 import { loadFixture } from '../helpers/fixture.js';
 
 function defaultInputs(overrides: Partial<ReleaseInputs> = {}): ReleaseInputs {
@@ -18,6 +25,7 @@ function defaultInputs(overrides: Partial<ReleaseInputs> = {}): ReleaseInputs {
     allowEmpty: false,
     mergeRequest: false,
     tagRelease: false,
+    skipProtectionCheck: false,
     today: '2026-05-25',
     remote: 'origin',
     ...overrides,
@@ -30,6 +38,7 @@ function makePorts(): Ports & {
   prompt: FakePrompt;
   log: SilentLogger;
   forge: FakeForge;
+  hostProber: FakeHostProber;
 } {
   return {
     fs: new FakeFs(),
@@ -37,6 +46,7 @@ function makePorts(): Ports & {
     prompt: new FakePrompt(),
     log: new SilentLogger(),
     forge: new FakeForge(),
+    hostProber: new FakeHostProber(),
   };
 }
 
@@ -45,6 +55,15 @@ describe('run() — happy paths', () => {
   beforeEach(() => {
     ports = makePorts();
   });
+
+  // Shared setup for the custom-prefix cases: a changelog ready to bump plus a
+  // tag history that establishes `myapp.` as the prefix in play.
+  async function runWithCustomPrefixTags(versionArg: string) {
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
+    return run(defaultInputs({ versionArg }), ports);
+  }
 
   test('graduates a minor release end-to-end with --yes', async () => {
     const fixture = loadFixture('02-minor-added');
@@ -63,6 +82,7 @@ describe('run() — happy paths', () => {
       'isClean',
       'fetch:origin',
       'branchStatus',
+      'remoteUrl:origin',
       'listTags',
       'currentBranch',
       'defaultBranch',
@@ -145,11 +165,7 @@ describe('run() — happy paths', () => {
   });
 
   test('adopts a custom prefix embedded in the version arg', async () => {
-    const fixture = loadFixture('02-minor-added');
-    ports.fs.files.set('CHANGELOG.md', fixture.input);
-    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
-
-    const plan = await run(defaultInputs({ versionArg: 'myapp.1.3.0' }), ports);
+    const plan = await runWithCustomPrefixTags('myapp.1.3.0');
 
     expect(plan.nextVersion).toBe('1.3.0');
     expect(plan.tagName).toBe('myapp.1.3.0');
@@ -159,11 +175,7 @@ describe('run() — happy paths', () => {
   });
 
   test('auto-detects a custom prefix from existing tags with a shorthand bump', async () => {
-    const fixture = loadFixture('02-minor-added');
-    ports.fs.files.set('CHANGELOG.md', fixture.input);
-    ports.git.tags = ['myapp.1.0.0', 'myapp.1.2.0'];
-
-    const plan = await run(defaultInputs({ versionArg: 'minor' }), ports);
+    const plan = await runWithCustomPrefixTags('minor');
 
     expect(plan.nextVersion).toBe('1.3.0');
     expect(plan.tagName).toBe('myapp.1.3.0');
@@ -290,6 +302,181 @@ describe('run() — merge-request mode', () => {
   });
 });
 
+describe('run() — protected-branch auto-switch', () => {
+  let ports: ReturnType<typeof makePorts>;
+  beforeEach(() => {
+    ports = makePorts();
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    ports.git.tags = ['v1.2.0'];
+  });
+
+  test('protected default branch switches to merge-request mode', async () => {
+    ports.forge.protectedResult = true;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('merge-request');
+    expect(plan.releaseBranch).toBe('release/v1.3.0');
+    expect(plan.tag).toBe(false);
+    expect(ports.git.calls).toContain('createBranch:release/v1.3.0');
+    expect(ports.git.calls).toContain('push:origin:release/v1.3.0:upstream');
+    expect(ports.git.calls).toContain('switchBranch:main');
+    expect(ports.git.calls).not.toContain('push:origin:main:follow');
+  });
+
+  test('unprotected branch pushes directly', async () => {
+    ports.forge.protectedResult = false;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('undeterminable protection pushes directly', async () => {
+    ports.forge.protectedResult = null;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('--no-protection-check skips the check entirely', async () => {
+    ports.forge.protectedResult = true;
+
+    const plan = await run(
+      defaultInputs({ versionArg: '1.3.0', skipProtectionCheck: true }),
+      ports,
+    );
+
+    expect(ports.forge.calls).toEqual([]);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('--no-push never checks protection', async () => {
+    ports.forge.protectedResult = true;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0', push: false }), ports);
+
+    expect(ports.forge.calls).toEqual([]);
+    expect(plan.mode).toBe('standard');
+  });
+
+  test('a non-default branch is not auto-switched', async () => {
+    ports.forge.protectedResult = true;
+    ports.git.branch = 'feature/foo';
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual([]);
+    expect(plan.mode).toBe('standard');
+  });
+});
+
+describe('run() — host resolution', () => {
+  let ports: ReturnType<typeof makePorts>;
+  beforeEach(() => {
+    ports = makePorts();
+    // CHANGELOG fixtures use github.com links; the remote (when set) should win.
+    ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
+    ports.git.tags = ['v1.2.0'];
+  });
+
+  test('the git remote is authoritative and beats the CHANGELOG host', async () => {
+    ports.git.remoteUrlValue = 'https://gitlab.com/acme/widget.git';
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(plan.host).toEqual({ kind: 'gitlab', base: 'https://gitlab.com/acme/widget' });
+    // gitlab.com is recognised by name, so no network probe runs.
+    expect(ports.hostProber.calls).toEqual([]);
+  });
+
+  test('a custom-domain remote is refined to gitlab via the prober', async () => {
+    ports.git.remoteUrlValue = 'git@vcs.corp.io:team/sub/app.git';
+    ports.hostProber.kind = 'gitlab';
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(plan.host).toEqual({ kind: 'gitlab', base: 'https://vcs.corp.io/team/sub/app' });
+    expect(ports.hostProber.calls).toEqual(['vcs.corp.io']);
+  });
+
+  test('an unprobeable custom-domain remote stays generic (never blocks)', async () => {
+    ports.git.remoteUrlValue = 'https://vcs.corp.io/team/app.git';
+    ports.hostProber.kind = null;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(plan.host).toEqual({ kind: 'generic', base: 'https://vcs.corp.io/team/app' });
+    expect(ports.hostProber.calls).toEqual(['vcs.corp.io']);
+  });
+
+  test('no usable remote falls back to the CHANGELOG host (no probe for github)', async () => {
+    ports.git.remoteUrlValue = null;
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(plan.host).toEqual({ kind: 'github', base: 'https://github.com/acme/widget' });
+    expect(ports.hostProber.calls).toEqual([]);
+  });
+
+  test('no remote: a generic CHANGELOG host is refined via the prober', async () => {
+    ports.git.remoteUrlValue = null;
+    ports.hostProber.kind = 'gitlab';
+    ports.fs.files.set(
+      'CHANGELOG.md',
+      [
+        '# Changelog',
+        '',
+        '## [Unreleased]',
+        '',
+        '### Added',
+        '',
+        '- A thing.',
+        '',
+        '## [1.2.0] - 2026-04-01',
+        '',
+        '### Added',
+        '',
+        '- Initial.',
+        '',
+        '[Unreleased]: https://git.acme.internal/foo/bar/compare/v1.2.0...main',
+        '[1.2.0]: https://git.acme.internal/foo/bar/compare/v1.1.0...v1.2.0',
+        '',
+      ].join('\n'),
+    );
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(plan.host.kind).toBe('gitlab');
+    expect(plan.host.base).toBe('https://git.acme.internal/foo/bar');
+    expect(ports.hostProber.calls).toEqual(['git.acme.internal']);
+  });
+
+  test('no remote and no forge URL anywhere → PubvError(no-host)', async () => {
+    ports.git.remoteUrlValue = null;
+    ports.fs.files.set(
+      'CHANGELOG.md',
+      ['# Changelog', '', '## [Unreleased]', '', '### Added', '', '- A thing.', ''].join('\n'),
+    );
+
+    try {
+      await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PubvError);
+      expect((err as PubvError).code).toBe('no-host');
+    }
+  });
+});
+
 describe('run() — tag-release mode', () => {
   let ports: ReturnType<typeof makePorts>;
   beforeEach(() => {
@@ -359,7 +546,7 @@ describe('run() — failures', () => {
 
   test('missing CHANGELOG.md without a forge URL → PubvError(no-host)', async () => {
     // No file and no remote to seed a forge URL: host detection fails.
-    ports.git.remote = null;
+    ports.git.remoteUrlValue = null;
     await expect(run(defaultInputs({ versionArg: '1.0.0' }), ports)).rejects.toMatchObject({
       code: 'no-host',
     });
@@ -462,7 +649,7 @@ describe('run() — --release (forge)', () => {
     const ports = makePorts();
     ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
     ports.git.tags = ['v1.2.0'];
-    ports.forge.result = { created: false, reason: 'gh not available' };
+    ports.forge.releaseResult = { created: false, reason: 'gh not available' };
 
     const plan = await run(defaultInputs({ versionArg: '1.3.0', release: true }), ports);
 
@@ -484,7 +671,7 @@ describe('run() — --release (forge)', () => {
 describe('run() — auto-scaffold on missing changelog', () => {
   test('scaffolds and cuts the first release (0.1.0)', async () => {
     const ports = makePorts();
-    ports.git.remote = 'https://github.com/owner/repo';
+    ports.git.remoteUrlValue = 'https://github.com/owner/repo';
 
     const plan = await run(defaultInputs(), ports);
 
@@ -502,7 +689,7 @@ describe('run() — auto-scaffold on missing changelog', () => {
 describe('runInit', () => {
   test('writes the scaffold without committing', async () => {
     const ports = makePorts();
-    ports.git.remote = 'https://github.com/owner/repo';
+    ports.git.remoteUrlValue = 'https://github.com/owner/repo';
 
     await runInit(defaultInputs(), ports);
 

@@ -2,10 +2,12 @@ import pkg from '../../package.json' with { type: 'json' };
 import { createForgeCli } from '../adapters/forge-cli.js';
 import { nodeFs } from '../adapters/fs-node.js';
 import { createGitCli } from '../adapters/git-cli.js';
+import { createHttpHostProber } from '../adapters/host-prober-http.js';
 import { createLogger } from '../adapters/logger-ansi.js';
 import { createPrompt } from '../adapters/prompt-readline.js';
 import { PubvError } from '../core/errors.js';
 import { runInit, run as runRelease } from '../core/release.js';
+import type { HostProber } from '../ports/host-prober.js';
 import { parseArgs } from './args.js';
 import { helpText } from './help.js';
 
@@ -40,6 +42,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   const cwd = process.cwd();
   const git = createGitCli({ cwd });
   const forge = createForgeCli({ cwd });
+  const hostProber = makeHostProber(PKG_VERSION);
+  const envSkip = process.env.PUBV_NO_PROTECTION_CHECK;
 
   log.banner('pubv', PKG_VERSION);
 
@@ -56,10 +60,11 @@ export async function main(argv: readonly string[]): Promise<number> {
     allowEmpty: args.allowEmpty,
     mergeRequest: args.mergeRequest,
     tagRelease: args.tagRelease,
+    skipProtectionCheck: args.skipProtectionCheck || (!!envSkip && envSkip !== '0'),
     today: args.date ?? new Date().toISOString().slice(0, 10),
     remote: args.remote,
   };
-  const ports = { git, fs: nodeFs, prompt, log, forge };
+  const ports = { git, fs: nodeFs, prompt, log, forge, hostProber };
 
   try {
     if (args.init) {
@@ -78,6 +83,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     log.fail(err instanceof Error ? err.message : String(err));
     return 1;
   }
+}
+
+/**
+ * The custom-domain HTTP fingerprint probe, or a no-op (always `null`, →
+ * `generic`) when `PUBV_NO_HOST_PROBE` is set — mirrors `PUBV_NO_PROTECTION_CHECK`.
+ */
+function makeHostProber(version: string): HostProber {
+  const off = process.env.PUBV_NO_HOST_PROBE;
+  if (off && off !== '0')
+    return {
+      async classify() {
+        return null;
+      },
+    };
+  return createHttpHostProber({ userAgent: `pubv/${version}` });
 }
 
 function formatError(err: unknown): string {

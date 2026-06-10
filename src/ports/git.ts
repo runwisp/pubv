@@ -25,6 +25,8 @@ export interface Git {
   /** Best-effort default branch via `origin/HEAD`; falls back to `main`. */
   defaultBranch(): Promise<string>;
   currentBranch(): Promise<string>;
+  /** URL of the named remote (`git remote get-url`), or `null` if it has none. */
+  remoteUrl(remote: string): Promise<string | null>;
   /** True when there are no uncommitted changes (staged or unstaged). */
   isClean(): Promise<boolean>;
   fetch(remote: string): Promise<void>;
@@ -33,8 +35,6 @@ export interface Git {
   listTags(): Promise<string[]>;
   /** The very first commit (root) hash. Used when there is no prior version. */
   firstCommit(): Promise<string>;
-  /** The remote's fetch URL, or `null` when the remote is unknown. */
-  remoteUrl(remote: string): Promise<string | null>;
   stage(path: string): Promise<void>;
   commit(message: string, options?: SignOptions): Promise<void>;
   tag(name: string, message: string, options?: SignOptions): Promise<void>;

@@ -20,11 +20,17 @@ export interface ReleaseResult {
 }
 
 /**
- * Create a release page on the forge by shelling out to its CLI (`gh` / `glab`).
- * Implementations must never throw: a missing CLI, an unsupported host, or a
- * failed invocation all resolve to `{ created: false, reason }` so the caller
- * can carry on — the tag is already pushed by the time this runs.
+ * Talks to the forge (GitHub / GitLab) by shelling out to its CLI (`gh` / `glab`).
+ * Implementations must be best-effort and never throw:
+ *
+ * - `branchProtected` returns `null` when protection can't be determined (no CLI,
+ *   unsupported host, network or auth failure) so the caller can fall back to pushing.
+ * - `createRelease` resolves to `{ created: false, reason }` when a release can't be
+ *   made (CLI missing, unsupported host, error) so the caller can carry on — the tag
+ *   is already pushed by the time this runs.
  */
 export interface Forge {
+  /** `true` = protected, `false` = not protected, `null` = undeterminable. */
+  branchProtected(host: HostInfo, branch: string): Promise<boolean | null>;
   createRelease(req: ReleaseRequest): Promise<ReleaseResult>;
 }
