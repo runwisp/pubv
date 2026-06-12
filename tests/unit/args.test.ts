@@ -57,6 +57,11 @@ describe('parseArgs', () => {
     expect(parseArgs(['--allow-empty'])).toMatchObject({ allowEmpty: true });
   });
 
+  test('parses --allow-branch (defaults to false)', () => {
+    expect(parseArgs([]).allowBranch).toBe(false);
+    expect(parseArgs(['--allow-branch'])).toMatchObject({ allowBranch: true });
+  });
+
   test('parses the init command', () => {
     expect(parseArgs(['init'])).toMatchObject({ init: true, version: null });
   });

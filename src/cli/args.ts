@@ -18,6 +18,8 @@ export interface ParsedArgs {
   release: boolean;
   /** Allow graduating an empty `[Unreleased]` section. */
   allowEmpty: boolean;
+  /** Allow releasing from a non-default branch (required with -y). */
+  allowBranch: boolean;
   /** Open a release branch + merge request instead of pushing the default branch. */
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
@@ -44,6 +46,7 @@ export function defaultArgs(): ParsedArgs {
     sign: false,
     release: false,
     allowEmpty: false,
+    allowBranch: false,
     mergeRequest: false,
     tagRelease: false,
     init: false,
@@ -141,6 +144,9 @@ function handleBool(arg: string, out: ParsedArgs): boolean {
       return true;
     case '--allow-empty':
       out.allowEmpty = true;
+      return true;
+    case '--allow-branch':
+      out.allowBranch = true;
       return true;
     case '--merge-request':
     case '--mr':

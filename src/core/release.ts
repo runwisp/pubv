@@ -47,6 +47,8 @@ export interface ReleaseInputs {
   release: boolean;
   /** Allow graduating an empty `[Unreleased]` section. */
   allowEmpty: boolean;
+  /** Allow releasing from a non-default branch (required with -y). */
+  allowBranch: boolean;
   /** Open a release branch + merge request instead of pushing the default branch. */
   mergeRequest: boolean;
   /** Tag the latest changelog release on HEAD and push the tag (post-merge step). */
@@ -130,9 +132,16 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<boolean> 
 
   if (currentBranch === defaultBranch) {
     log.ok(`on ${currentBranch}`);
+  } else if (inputs.allowBranch) {
+    log.warn(`releasing from ${currentBranch} (not ${defaultBranch}) — allowed via --allow-branch`);
+  } else if (inputs.yes) {
+    throw new PubvError(
+      'wrong-branch',
+      `not on ${defaultBranch} (on ${currentBranch}) — pass --allow-branch to release from a non-default branch`,
+    );
   } else {
     log.warn(`current branch is ${currentBranch}, expected ${defaultBranch}`);
-    if (!inputs.yes && !(await prompt.confirm('continue from this branch?', false))) {
+    if (!(await prompt.confirm('continue from this branch?', false))) {
       throw new PubvError('wrong-branch', `not on ${defaultBranch}`);
     }
   }
