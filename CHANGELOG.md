@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-12
+
 ### Added
 
 - `--allow-branch` opt-in for releasing from a non-default branch. Interactive runs still prompt for confirmation, but `-y`/CI now refuses a non-default branch unless the flag is passed — so a release can't be cut from the wrong branch by mistake.
@@ -51,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.2.0...main
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.3.0...main
+[1.3.0]: https://github.com/runwisp/pubv/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/runwisp/pubv/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/runwisp/pubv/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/runwisp/pubv/releases/tag/v1.0.0
