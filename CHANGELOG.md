@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `--allow-branch` opt-in for releasing from a non-default branch. Interactive runs still prompt for confirmation, but `-y`/CI now refuses a non-default branch unless the flag is passed — so a release can't be cut from the wrong branch by mistake.
 
+### Changed
+
+- When the protected-branch check is skipped because `gh`/`glab` isn't installed, `pubv` now says so explicitly (`gh not found — skipping protected-branch check`) so you know the feature exists and how to enable it. Other undeterminable cases (auth, network, unsupported host) still push directly with a generic notice.
+
 ## [1.2.0] - 2026-06-10
 
 ### Added
