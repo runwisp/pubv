@@ -96,8 +96,8 @@ export interface Ports {
 export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleasePlan> {
   if (inputs.tagRelease) return runTagRelease(inputs, ports);
 
-  const scaffold = await preflight(inputs, ports);
-  const plan = await buildPlan(inputs, ports, scaffold);
+  const pre = await preflight(inputs, ports);
+  const plan = await buildPlan(inputs, ports, pre);
   printPlan(plan, ports.log);
 
   if (inputs.dryRun) {
@@ -116,7 +116,18 @@ export async function run(inputs: ReleaseInputs, ports: Ports): Promise<ReleaseP
 
 // ─── preflight ─────────────────────────────────────────────────────────────
 
-async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<boolean> {
+interface PreflightResult {
+  /** True when the changelog did not exist and is being scaffolded this run. */
+  scaffold: boolean;
+  branch: string;
+  defaultBranch: string;
+  /** Forge host resolved from the origin remote; `null` when no usable remote. */
+  remoteHost: HostInfo | null;
+  /** Release mode decided up front (protected-branch check happens here). */
+  mode: ReleaseMode;
+}
+
+async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<PreflightResult> {
   const { fs, git, log, prompt } = ports;
 
   const scaffold = !(await fs.exists(inputs.changelogPath));
@@ -173,7 +184,14 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<boolean> 
   }
   log.ok(status.hasUpstream ? `${inputs.remote} up-to-date` : 'no upstream tracking branch');
 
-  return scaffold;
+  // Decide the release mode here so a push to a protected default branch is
+  // caught up front — querying the forge (gh/glab) as a preflight gate rather
+  // than after the plan is built. The host comes from the origin remote (the
+  // authoritative push target); the CHANGELOG fallback is only for URLs later.
+  const remoteHost = await resolveHostFromRemote(inputs, ports);
+  const mode = await resolveMode(inputs, ports, remoteHost, currentBranch, defaultBranch);
+
+  return { scaffold, branch: currentBranch, defaultBranch, remoteHost, mode };
 }
 
 // ─── plan ──────────────────────────────────────────────────────────────────
@@ -181,9 +199,10 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<boolean> 
 async function buildPlan(
   inputs: ReleaseInputs,
   ports: Ports,
-  scaffold: boolean,
+  pre: PreflightResult,
 ): Promise<ReleasePlan> {
   const { fs, git, log, prompt } = ports;
+  const { scaffold } = pre;
 
   const source = scaffold
     ? buildScaffold({ repoUrl: await git.remoteUrl(inputs.remote) })
@@ -208,7 +227,9 @@ async function buildPlan(
 
   printChanges(cl.unreleased.body, log);
 
-  const host = await resolveHost(cl, inputs, ports);
+  // The origin remote is authoritative (resolved in preflight); the CHANGELOG
+  // fallback only kicks in for URL generation when there's no usable remote.
+  const host = pre.remoteHost ?? (await resolveHostFromChangelog(cl, inputs, ports));
   const tags = await git.listTags();
   const suggestions = computeSuggestions(cl);
 
@@ -231,9 +252,7 @@ async function buildPlan(
   const tagName = applyPrefix(nextVersion, tagPrefix);
   const headingVersion = changelogVersion(nextVersion, tagPrefix);
   const fromRef = await resolveFromRef(suggestions.last, tagPrefix, git);
-  const branch = await git.currentBranch();
-  const defaultBranch = await git.defaultBranch();
-  const mode = await resolveMode(inputs, ports, host, branch, defaultBranch);
+  const { branch, defaultBranch, mode } = pre;
   const releaseBranch = mode === 'merge-request' ? `release/${tagName}` : null;
   const mrUrl =
     mode === 'merge-request' ? mergeRequestUrl(host, releaseBranch!, defaultBranch) : null;
@@ -275,51 +294,88 @@ async function buildPlan(
  * forces MR mode. Otherwise, when a direct push would land on the protected
  * default branch, we auto-switch to the MR flow so no commit/tag is made on a
  * branch the push would be rejected from. The check only runs for that exact
- * case (push enabled, on the default branch); anything undeterminable proceeds
- * with a direct push, since detection is advisory and must never block.
+ * case (push enabled, on a GitHub/GitLab origin remote's default branch);
+ * anything else — no remote, an unsupported host, or an undeterminable answer —
+ * proceeds with a direct push, since detection is advisory and must never block.
  */
 async function resolveMode(
   inputs: ReleaseInputs,
   ports: Ports,
-  host: HostInfo,
+  remoteHost: HostInfo | null,
   branch: string,
   defaultBranch: string,
 ): Promise<ReleaseMode> {
   if (inputs.mergeRequest) return 'merge-request';
-  if (inputs.skipProtectionCheck || !inputs.push || branch !== defaultBranch) {
+  if (
+    inputs.skipProtectionCheck ||
+    inputs.tagRelease ||
+    !inputs.push ||
+    branch !== defaultBranch ||
+    // Only github/gitlab have a protected-branch query (`gh`/`glab`); without a
+    // detected forge remote there's nothing to push to, so don't probe.
+    !remoteHost ||
+    (remoteHost.kind !== 'github' && remoteHost.kind !== 'gitlab')
+  ) {
     return 'standard';
   }
 
-  const isProtected = await ports.forge.branchProtected(host, branch);
+  const spinner = ports.log.spinner(`checking ${branch} protection on ${remoteHost.kind}`);
+  const isProtected = await ports.forge.branchProtected(remoteHost, branch);
   if (isProtected === true) {
-    ports.log.warn(`${branch} is protected on ${host.kind} — switching to merge-request workflow`);
+    spinner.stop();
+    ports.log.warn(
+      `${branch} is protected on ${remoteHost.kind} — switching to merge-request workflow`,
+    );
     return 'merge-request';
   }
-  if (isProtected === null) {
+  if (isProtected === false) {
+    spinner.succeed(`${branch} is not protected`);
+  } else if (isProtected === 'cli-missing') {
+    spinner.stop();
+    const cli = remoteHost.kind === 'gitlab' ? 'glab' : 'gh';
     ports.log.info(
-      'branch protection undetermined (no gh/glab or unsupported host) — pushing directly',
+      `${cli} not found — skipping protected-branch check (install ${cli} to enable it)`,
     );
+  } else {
+    spinner.stop();
+    ports.log.info('branch protection undetermined — pushing directly');
   }
   return 'standard';
 }
 
 /**
- * Resolve the forge host, authoritatively. The git remote is the source of
- * truth (it names the real host + project path); the CHANGELOG is only scraped
- * when no usable remote exists. A custom domain the name heuristic can't place
- * (`generic`) is refined by an HTTP fingerprint probe — best-effort, so a host
- * that can't be probed simply stays `generic` and never blocks the release.
+ * Resolve the forge host from the origin remote — the authoritative push
+ * target (it names the real host + project path). A custom domain the name
+ * heuristic can't place (`generic`) is refined by an HTTP fingerprint probe —
+ * best-effort, so a host that can't be probed stays `generic`. Returns `null`
+ * when there's no usable remote, leaving the CHANGELOG fallback to the caller.
  */
-async function resolveHost(cl: Changelog, inputs: ReleaseInputs, ports: Ports): Promise<HostInfo> {
+async function resolveHostFromRemote(
+  inputs: ReleaseInputs,
+  ports: Ports,
+): Promise<HostInfo | null> {
   const { git, hostProber } = ports;
 
   const remote = await git.remoteUrl(inputs.remote);
   const ref = remote ? parseRemoteUrl(remote) : null;
-  if (ref) {
-    let kind = classifyHost(ref.host);
-    if (kind === 'generic') kind = (await hostProber.classify(ref.host)) ?? 'generic';
-    return { kind, base: `https://${ref.host}/${ref.projectPath}` };
-  }
+  if (!ref) return null;
+
+  let kind = classifyHost(ref.host);
+  if (kind === 'generic') kind = (await hostProber.classify(ref.host)) ?? 'generic';
+  return { kind, base: `https://${ref.host}/${ref.projectPath}` };
+}
+
+/**
+ * Resolve the forge host from forge URLs scraped out of the CHANGELOG — the
+ * fallback used only when no usable remote exists. A `generic` match is refined
+ * by an HTTP fingerprint probe; an absent forge URL is a hard `no-host` error.
+ */
+async function resolveHostFromChangelog(
+  cl: Changelog,
+  inputs: ReleaseInputs,
+  ports: Ports,
+): Promise<HostInfo> {
+  const { hostProber } = ports;
 
   const host = detectHost(changelogLines(cl));
   if (!host) {
@@ -333,6 +389,18 @@ async function resolveHost(cl: Changelog, inputs: ReleaseInputs, ports: Ports): 
     if (probed) return { ...host, kind: probed };
   }
   return host;
+}
+
+/**
+ * Resolve the forge host authoritatively: origin remote first, CHANGELOG scrape
+ * as a fallback. Used where the full resolution is needed in one shot (e.g.
+ * `--tag-release`), versus the split paths the release flow uses across
+ * preflight and plan building.
+ */
+async function resolveHost(cl: Changelog, inputs: ReleaseInputs, ports: Ports): Promise<HostInfo> {
+  return (
+    (await resolveHostFromRemote(inputs, ports)) ?? resolveHostFromChangelog(cl, inputs, ports)
+  );
 }
 
 function changelogLines(cl: Changelog): string[] {

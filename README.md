@@ -166,7 +166,10 @@ URLs and to run the protected-branch check. It figures this out in order:
    (`code.acme.com`, `vcs.corp.io`, …) can't be recognised by name, so `pubv` fetches
    its pre-login PWA manifest (`GET /-/manifest.json`) and checks for GitLab over HTTPS.
 4. **CHANGELOG fallback.** With no usable remote, `pubv` scrapes the forge URL from
-   your `CHANGELOG.md` link refs instead.
+   your `CHANGELOG.md` link refs instead — for URL generation only. The
+   protected-branch check is a preflight gate and runs only when the **origin
+   remote** itself resolves to GitHub/GitLab; with no such remote it's skipped
+   (there's nothing to push to) and the release proceeds in standard mode.
 
 The probe is **best-effort and never blocks a release**: a host that's unreachable,
 login-walled, or simply isn't a known forge falls back to a generic classification

@@ -85,8 +85,6 @@ describe('run() — happy paths', () => {
       'branchStatus',
       'remoteUrl:origin',
       'listTags',
-      'currentBranch',
-      'defaultBranch',
       'stage:CHANGELOG.md',
       'commit:v1.3.0',
       'tag:v1.3.0:v1.3.0',
@@ -310,6 +308,9 @@ describe('run() — protected-branch auto-switch', () => {
     const fixture = loadFixture('02-minor-added');
     ports.fs.files.set('CHANGELOG.md', fixture.input);
     ports.git.tags = ['v1.2.0'];
+    // The protected-branch check is gated on a detected GitHub/GitLab origin
+    // remote — without one, there's nothing to push to and the check is skipped.
+    ports.git.remoteUrlValue = 'https://github.com/acme/widget.git';
   });
 
   test('protected default branch switches to merge-request mode', async () => {
@@ -345,6 +346,20 @@ describe('run() — protected-branch auto-switch', () => {
     expect(ports.forge.calls).toEqual(['branchProtected:main']);
     expect(plan.mode).toBe('standard');
     expect(ports.git.calls).toContain('push:origin:main:follow');
+  });
+
+  test('missing forge CLI pushes directly and tells the user', async () => {
+    ports.forge.protectedResult = 'cli-missing';
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+    const info = ports.log.events.find(
+      (e) => e.kind === 'info' && /gh not found/.test(String(e.args[0])),
+    );
+    expect(info).toBeDefined();
   });
 
   test('--no-protection-check skips the check entirely', async () => {

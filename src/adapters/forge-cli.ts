@@ -75,9 +75,11 @@ export function createForgeCli(opts: ForgeCliOptions): Forge {
         if (t === 'true') return true;
         if (t === 'false') return false;
         return null;
-      } catch {
-        // Missing CLI (ENOENT), not authenticated, 404, timeout, unparseable —
-        // all map to "can't tell", letting the caller proceed with a push.
+      } catch (err) {
+        // A missing CLI (ENOENT) is worth flagging so the user knows the check
+        // was skippable; everything else (not authenticated, 404, timeout,
+        // unparseable) maps to "can't tell" and proceeds with a push.
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 'cli-missing';
         return null;
       }
     },
