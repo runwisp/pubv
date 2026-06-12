@@ -58,6 +58,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     sign: args.sign,
     release: args.release,
     allowEmpty: args.allowEmpty,
+    allowBranch: args.allowBranch,
     mergeRequest: args.mergeRequest,
     tagRelease: args.tagRelease,
     skipProtectionCheck: args.skipProtectionCheck || (!!envSkip && envSkip !== '0'),

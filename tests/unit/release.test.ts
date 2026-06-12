@@ -23,6 +23,7 @@ function defaultInputs(overrides: Partial<ReleaseInputs> = {}): ReleaseInputs {
     sign: false,
     release: false,
     allowEmpty: false,
+    allowBranch: false,
     mergeRequest: false,
     tagRelease: false,
     skipProtectionCheck: false,
@@ -372,7 +373,7 @@ describe('run() — protected-branch auto-switch', () => {
     ports.forge.protectedResult = true;
     ports.git.branch = 'feature/foo';
 
-    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+    const plan = await run(defaultInputs({ allowBranch: true, versionArg: '1.3.0' }), ports);
 
     expect(ports.forge.calls).toEqual([]);
     expect(plan.mode).toBe('standard');
@@ -566,12 +567,40 @@ describe('run() — failures', () => {
     }
   });
 
-  test('off main branch with --yes is allowed (no prompt to abort)', async () => {
+  test('off main branch with --yes (no --allow-branch) → PubvError(wrong-branch)', async () => {
     ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
     ports.git.tags = ['v1.2.0'];
     ports.git.branch = 'feature/foo';
 
-    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+    try {
+      await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PubvError);
+      expect((err as PubvError).code).toBe('wrong-branch');
+    }
+  });
+
+  test('off main branch with --yes + --allow-branch → proceeds', async () => {
+    ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
+    ports.git.tags = ['v1.2.0'];
+    ports.git.branch = 'feature/foo';
+
+    const plan = await run(defaultInputs({ allowBranch: true, versionArg: '1.3.0' }), ports);
+    expect(plan.branch).toBe('feature/foo');
+  });
+
+  test('off main branch interactive + --allow-branch → proceeds without prompt', async () => {
+    ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
+    ports.git.tags = ['v1.2.0'];
+    ports.git.branch = 'feature/foo';
+    // No branch-confirmation entry in the prompt script: the flag skips the prompt.
+    ports.prompt.script = [{ kind: 'confirm', value: true }];
+
+    const plan = await run(
+      defaultInputs({ yes: false, allowBranch: true, versionArg: '1.3.0' }),
+      ports,
+    );
     expect(plan.branch).toBe('feature/foo');
   });
 

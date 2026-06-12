@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--allow-branch` opt-in for releasing from a non-default branch. Interactive runs still prompt for confirmation, but `-y`/CI now refuses a non-default branch unless the flag is passed — so a release can't be cut from the wrong branch by mistake.
+
 ## [1.2.0] - 2026-06-10
 
 ### Added

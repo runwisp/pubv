@@ -22,6 +22,7 @@ export function helpText(): string {
     --sign              ${d('Sign the release commit and tag (git -S / -s)')}
     --release           ${d('Create a forge release via gh/glab after pushing')}
     --allow-empty       ${d('Allow graduating an empty [Unreleased] section')}
+    --allow-branch      ${d('Allow releasing from a non-default branch (required with -y)')}
     --merge-request     ${d('Protected branch: open a release/<v> branch + MR (alias --mr)')}
     --no-protection-check ${d('Push directly; skip the gh/glab protected-branch check')}
     --tag-release       ${d('Post-merge: tag the latest changelog release on HEAD, push it')}
