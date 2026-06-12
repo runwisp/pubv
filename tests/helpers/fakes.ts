@@ -99,7 +99,7 @@ export class FakeGit implements Git {
 
 export class FakeForge implements Forge {
   /** Value returned by `branchProtected` (default: undeterminable). */
-  protectedResult: boolean | null = null;
+  protectedResult: boolean | 'cli-missing' | null = null;
   /** Result returned from `createRelease`; default is a successful creation. */
   releaseResult: ReleaseResult = {
     created: true,
@@ -108,7 +108,7 @@ export class FakeForge implements Forge {
   requests: ReleaseRequest[] = [];
   calls: string[] = [];
 
-  async branchProtected(_host: HostInfo, branch: string): Promise<boolean | null> {
+  async branchProtected(_host: HostInfo, branch: string): Promise<boolean | 'cli-missing' | null> {
     this.calls.push(`branchProtected:${branch}`);
     return this.protectedResult;
   }

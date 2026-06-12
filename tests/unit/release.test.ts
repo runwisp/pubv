@@ -348,6 +348,20 @@ describe('run() — protected-branch auto-switch', () => {
     expect(ports.git.calls).toContain('push:origin:main:follow');
   });
 
+  test('missing forge CLI pushes directly and tells the user', async () => {
+    ports.forge.protectedResult = 'cli-missing';
+
+    const plan = await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+
+    expect(ports.forge.calls).toEqual(['branchProtected:main']);
+    expect(plan.mode).toBe('standard');
+    expect(ports.git.calls).toContain('push:origin:main:follow');
+    const info = ports.log.events.find(
+      (e) => e.kind === 'info' && /gh not found/.test(String(e.args[0])),
+    );
+    expect(info).toBeDefined();
+  });
+
   test('--no-protection-check skips the check entirely', async () => {
     ports.forge.protectedResult = true;
 

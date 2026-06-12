@@ -330,11 +330,15 @@ async function resolveMode(
   }
   if (isProtected === false) {
     spinner.succeed(`${branch} is not protected`);
+  } else if (isProtected === 'cli-missing') {
+    spinner.stop();
+    const cli = remoteHost.kind === 'gitlab' ? 'glab' : 'gh';
+    ports.log.info(
+      `${cli} not found — skipping protected-branch check (install ${cli} to enable it)`,
+    );
   } else {
     spinner.stop();
-    ports.log.info(
-      'branch protection undetermined (no gh/glab or unsupported host) — pushing directly',
-    );
+    ports.log.info('branch protection undetermined — pushing directly');
   }
   return 'standard';
 }
