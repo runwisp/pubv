@@ -98,7 +98,8 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<void> {
     }
   }
 
-  if (await git.isClean()) {
+  const clean = await git.isClean();
+  if (clean) {
     log.ok('working tree clean');
   } else {
     log.warn('working tree has uncommitted changes');
@@ -118,12 +119,53 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<void> {
 
   const status = await git.branchStatus(currentBranch, inputs.remote);
   if (status.hasUpstream && status.behind > 0) {
-    throw new PubvError(
-      'behind-remote',
-      `${currentBranch} is ${status.behind} commit(s) behind ${inputs.remote}/${currentBranch}`,
-    );
+    await resolveBehind(currentBranch, status, clean, inputs, ports);
+    return;
   }
   log.ok(status.hasUpstream ? `${inputs.remote} up-to-date` : 'no upstream tracking branch');
+}
+
+/**
+ * The local branch trails its upstream. When it can be fast-forwarded (no local
+ * commits and a clean tree) we offer — or with `--yes`, simply perform — the
+ * fast-forward. Otherwise we bail so the user can sort it out by hand.
+ */
+async function resolveBehind(
+  branch: string,
+  status: { ahead: number; behind: number },
+  clean: boolean,
+  inputs: ReleaseInputs,
+  ports: Ports,
+): Promise<void> {
+  const { git, log, prompt } = ports;
+  const ref = `${inputs.remote}/${branch}`;
+
+  if (status.ahead > 0) {
+    throw new PubvError(
+      'diverged-remote',
+      `${branch} has diverged from ${ref} (${status.ahead} ahead, ${status.behind} behind); resolve manually`,
+    );
+  }
+  if (!clean) {
+    throw new PubvError(
+      'behind-remote',
+      `${branch} is ${status.behind} commit(s) behind ${ref}; commit or stash, then pull`,
+    );
+  }
+
+  log.warn(`${branch} is ${status.behind} commit(s) behind ${ref}`);
+  if (!inputs.yes && !(await prompt.confirm(`fast-forward to ${ref}?`, true))) {
+    throw new PubvError('behind-remote', `${branch} is behind ${ref}`);
+  }
+
+  const spinner = log.spinner(`fast-forwarding to ${ref}`);
+  try {
+    await git.pull(inputs.remote, branch);
+    spinner.succeed(`fast-forwarded to ${ref}`);
+  } catch (err) {
+    spinner.fail('fast-forward failed');
+    throw err;
+  }
 }
 
 // ─── plan ──────────────────────────────────────────────────────────────────

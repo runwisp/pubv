@@ -33,6 +33,10 @@ export function createGitCli(opts: GitCliOptions): Git {
       await run(['fetch', remote]);
     },
 
+    async pull(remote, branch) {
+      await run(['merge', '--ff-only', `${remote}/${branch}`]);
+    },
+
     async branchStatus(branch, remote): Promise<BranchStatus> {
       try {
         await run(['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}/${branch}`]);

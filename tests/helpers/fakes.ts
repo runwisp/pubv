@@ -30,6 +30,7 @@ export class FakeGit implements Git {
   rootCommit = 'abcdef0';
   fetchShouldFail = false;
   pushShouldFail = false;
+  pullShouldFail = false;
   calls: string[] = [];
 
   async defaultBranch(): Promise<string> {
@@ -51,6 +52,10 @@ export class FakeGit implements Git {
   async branchStatus(_branch: string, _remote: string): Promise<BranchStatus> {
     this.calls.push('branchStatus');
     return this.upstream;
+  }
+  async pull(remote: string, branch: string): Promise<void> {
+    this.calls.push(`pull:${remote}:${branch}`);
+    if (this.pullShouldFail) throw new Error('fake pull failure');
   }
   async listTags(): Promise<string[]> {
     this.calls.push('listTags');

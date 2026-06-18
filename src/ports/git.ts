@@ -21,6 +21,8 @@ export interface Git {
   isClean(): Promise<boolean>;
   fetch(remote: string): Promise<void>;
   branchStatus(branch: string, remote: string): Promise<BranchStatus>;
+  /** Fast-forward-only pull. Fails (does not merge) if the branch has diverged. */
+  pull(remote: string, branch: string): Promise<void>;
   /** All local tag names, in repository order. */
   listTags(): Promise<string[]>;
   /** The very first commit (root) hash. Used when there is no prior version. */
