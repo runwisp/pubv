@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- When the working tree is clean and the current branch is behind its upstream by a fast-forwardable amount, `pubv` now offers to fast-forward instead of aborting. With `-y`/CI it fast-forwards automatically; interactively it prompts first. A diverged branch (local commits *and* behind) or a dirty tree is still refused so nothing is merged or pulled over uncommitted work.
+
 ## [1.3.0] - 2026-06-12
 
 ### Added
