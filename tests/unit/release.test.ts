@@ -568,17 +568,53 @@ describe('run() — failures', () => {
     });
   });
 
-  test('behind remote → PubvError(behind-remote)', async () => {
+  test('behind remote + clean + --yes → auto fast-forwards', async () => {
     ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
     ports.git.tags = ['v1.2.0'];
     ports.git.upstream = { hasUpstream: true, ahead: 0, behind: 3 };
+
+    await run(defaultInputs({ versionArg: '1.3.0' }), ports);
+    expect(ports.git.calls).toContain('pull:origin:main');
+  });
+
+  test('behind remote + clean (interactive) + confirm → fast-forwards', async () => {
+    ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
+    ports.git.tags = ['v1.2.0'];
+    ports.git.upstream = { hasUpstream: true, ahead: 0, behind: 3 };
+    ports.prompt.script = [{ kind: 'confirm', value: true }];
+
+    await run(defaultInputs({ yes: false, versionArg: '1.3.0' }), ports);
+    expect(ports.git.calls).toContain('pull:origin:main');
+  });
+
+  test('behind remote + clean (interactive) + decline → PubvError(behind-remote)', async () => {
+    ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
+    ports.git.tags = ['v1.2.0'];
+    ports.git.upstream = { hasUpstream: true, ahead: 0, behind: 3 };
+    ports.prompt.script = [{ kind: 'confirm', value: false }];
+
+    try {
+      await run(defaultInputs({ yes: false, versionArg: '1.3.0' }), ports);
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PubvError);
+      expect((err as PubvError).code).toBe('behind-remote');
+      expect(ports.git.calls).not.toContain('pull:origin:main');
+    }
+  });
+
+  test('diverged from remote → PubvError(diverged-remote), no pull', async () => {
+    ports.fs.files.set('CHANGELOG.md', loadFixture('02-minor-added').input);
+    ports.git.tags = ['v1.2.0'];
+    ports.git.upstream = { hasUpstream: true, ahead: 2, behind: 3 };
 
     try {
       await run(defaultInputs({ versionArg: '1.3.0' }), ports);
       throw new Error('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(PubvError);
-      expect((err as PubvError).code).toBe('behind-remote');
+      expect((err as PubvError).code).toBe('diverged-remote');
+      expect(ports.git.calls).not.toContain('pull:origin:main');
     }
   });
 

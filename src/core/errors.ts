@@ -11,6 +11,7 @@ export type PubvErrorCode =
   | 'dirty-tree'
   | 'wrong-branch'
   | 'behind-remote'
+  | 'diverged-remote'
   | 'user-aborted'
   | 'git-failure';
 
