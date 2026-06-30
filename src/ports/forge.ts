@@ -32,8 +32,15 @@ export interface ReleaseResult {
  */
 export interface Forge {
   /**
-   * `true` = protected, `false` = not protected, `'cli-missing'` = `gh`/`glab` not
-   * installed, `null` = otherwise undeterminable (auth, 404, timeout, unsupported host).
+   * Whether a direct push to `branch` must be routed through a merge/pull request:
+   * for GitHub, whether a pull request is required ("Require a pull request before
+   * merging" — mere branch protection is not enough); for GitLab, whether the
+   * current user is barred from pushing directly (`.can_push === false`). In both
+   * cases a merely protected branch a maintainer can still push to is *not* enough.
+   *
+   * `true` = route through an MR, `false` = a direct push is fine, `'cli-missing'` =
+   * `gh`/`glab` not installed, `null` = otherwise undeterminable (auth, 404, timeout,
+   * unsupported host).
    */
   branchProtected(host: HostInfo, branch: string): Promise<boolean | 'cli-missing' | null>;
   createRelease(req: ReleaseRequest): Promise<ReleaseResult>;

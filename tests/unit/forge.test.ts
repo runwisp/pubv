@@ -5,11 +5,16 @@ import type { HostInfo } from '../../src/core/host.js';
 const host = (kind: HostInfo['kind'], base: string): HostInfo => ({ kind, base });
 
 describe('forgeQuery', () => {
-  test('github.com → gh api with no --hostname', () => {
+  test('github.com → gh api hits the rules endpoint for a pull_request rule', () => {
     const q = forgeQuery(host('github', 'https://github.com/acme/widget'), 'main');
     expect(q).toEqual({
       cmd: 'gh',
-      args: ['api', 'repos/acme/widget/branches/main', '--jq', '.protected'],
+      args: [
+        'api',
+        'repos/acme/widget/rules/branches/main',
+        '--jq',
+        'any(.type == "pull_request")',
+      ],
     });
   });
 
@@ -18,9 +23,9 @@ describe('forgeQuery', () => {
     expect(q?.cmd).toBe('gh');
     expect(q?.args).toEqual([
       'api',
-      'repos/acme/widget/branches/main',
+      'repos/acme/widget/rules/branches/main',
       '--jq',
-      '.protected',
+      'any(.type == "pull_request")',
       '--hostname',
       'git.enterprise.github.com',
     ]);
@@ -30,7 +35,12 @@ describe('forgeQuery', () => {
     const q = forgeQuery(host('gitlab', 'https://gitlab.com/acme/widget'), 'main');
     expect(q).toEqual({
       cmd: 'glab',
-      args: ['api', 'projects/acme%2Fwidget/repository/branches/main', '--jq', '.protected'],
+      args: [
+        'api',
+        'projects/acme%2Fwidget/repository/branches/main',
+        '--jq',
+        '.can_push == false',
+      ],
       env: { GITLAB_HOST: 'gitlab.com' },
     });
   });
@@ -42,7 +52,7 @@ describe('forgeQuery', () => {
       'api',
       'projects/team%2Fapp/repository/branches/release',
       '--jq',
-      '.protected',
+      '.can_push == false',
     ]);
   });
 

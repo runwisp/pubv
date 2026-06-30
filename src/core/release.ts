@@ -333,12 +333,13 @@ async function buildPlan(
 
 /**
  * Decide whether to push directly or open a merge request. `--merge-request`
- * forces MR mode. Otherwise, when a direct push would land on the protected
- * default branch, we auto-switch to the MR flow so no commit/tag is made on a
- * branch the push would be rejected from. The check only runs for that exact
- * case (push enabled, on a GitHub/GitLab origin remote's default branch);
- * anything else — no remote, an unsupported host, or an undeterminable answer —
- * proceeds with a direct push, since detection is advisory and must never block.
+ * forces MR mode. Otherwise, when a direct push to the default branch would be
+ * rejected — GitHub requires a pull request, or the GitLab branch is protected —
+ * we auto-switch to the MR flow so no commit/tag is made on a branch the push
+ * can't land on. The check only runs for that exact case (push enabled, on a
+ * GitHub/GitLab origin remote's default branch); anything else — no remote, an
+ * unsupported host, or an undeterminable answer — proceeds with a direct push,
+ * since detection is advisory and must never block.
  */
 async function resolveMode(
   inputs: ReleaseInputs,
@@ -361,22 +362,25 @@ async function resolveMode(
     return 'standard';
   }
 
-  const spinner = ports.log.spinner(`checking ${branch} protection on ${remoteHost.kind}`);
-  const isProtected = await ports.forge.branchProtected(remoteHost, branch);
-  if (isProtected === true) {
+  const requirement = remoteHost.kind === 'github' ? 'pull request' : 'push access';
+  const spinner = ports.log.spinner(`checking ${branch} ${requirement} on ${remoteHost.kind}`);
+  const mustOpenMr = await ports.forge.branchProtected(remoteHost, branch);
+  if (mustOpenMr === true) {
     spinner.stop();
+    const reason =
+      remoteHost.kind === 'github' ? 'requires a pull request' : "can't be pushed to directly";
     ports.log.warn(
-      `${branch} is protected on ${remoteHost.kind} — switching to merge-request workflow`,
+      `${branch} ${reason} on ${remoteHost.kind} — switching to merge-request workflow`,
     );
     return 'merge-request';
   }
-  if (isProtected === false) {
-    spinner.succeed(`${branch} is not protected`);
-  } else if (isProtected === 'cli-missing') {
+  if (mustOpenMr === false) {
+    spinner.succeed(`${branch} accepts direct pushes`);
+  } else if (mustOpenMr === 'cli-missing') {
     spinner.stop();
     const cli = remoteHost.kind === 'gitlab' ? 'glab' : 'gh';
     ports.log.info(
-      `${cli} not found — skipping protected-branch check (install ${cli} to enable it)`,
+      `${cli} not found — skipping ${requirement} check (install ${cli} to enable it)`,
     );
   } else {
     spinner.stop();
