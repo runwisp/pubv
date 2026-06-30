@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-30
+
 ### Added
 
 - When the working tree is clean and the current branch is behind its upstream by a fast-forwardable amount, `pubv` now offers to fast-forward instead of aborting. With `-y`/CI it fast-forwards automatically; interactively it prompts first. A diverged branch (local commits *and* behind) or a dirty tree is still refused so nothing is merged or pulled over uncommitted work.
@@ -61,7 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.3.0...main
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.4.0...main
+[1.4.0]: https://github.com/runwisp/pubv/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/runwisp/pubv/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/runwisp/pubv/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/runwisp/pubv/compare/v1.0.0...v1.1.0
