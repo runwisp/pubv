@@ -130,9 +130,17 @@ pubv init             Scaffold a new CHANGELOG.md and exit.
 
 ## Protected branches (merge-request workflow)
 
-If your default branch is protected and only accepts changes via merge/pull
-requests, you can't push the release commit directly. `pubv` splits the release
-into two steps:
+If your default branch only accepts changes via merge/pull requests, you can't
+push the release commit directly. `pubv` detects this up front and switches to
+the merge-request workflow automatically (or force it with `--merge-request`).
+On **GitHub** the switch fires only when the branch actually requires a pull
+request before merging — other branch-protection rules (required status checks,
+signed commits, linear history, deletion protection) don't block a direct push,
+so they don't force the MR flow. On **GitLab** it fires only when *you* can't
+push to the branch directly (`can_push: false`); a branch merely protected with
+"Maintainers can push" still pushes directly when you're a maintainer.
+
+The workflow splits the release into two steps:
 
 ```bash
 pubv --merge-request   # off the default branch:

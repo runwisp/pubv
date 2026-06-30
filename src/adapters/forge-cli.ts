@@ -16,9 +16,26 @@ export interface ForgeQuery {
 }
 
 /**
- * Build the forge-CLI invocation that prints whether `branch` is protected
- * (`true` / `false` via `--jq .protected`), or `null` when the host has no
- * supported CLI. Pure, so command construction is testable without a real CLI.
+ * Build the forge-CLI invocation that prints (`true` / `false`) whether a direct
+ * push to `branch` must be routed through a merge/pull request, or `null` when
+ * the host has no supported CLI. Pure, so command construction is testable
+ * without a real CLI.
+ *
+ * The two forges answer different questions because their models differ:
+ *
+ * - GitHub: a branch being "protected" is far too broad — required status
+ *   checks, signed commits, linear history, and even deletion protection all
+ *   flip `.protected` without blocking a direct push. The only rule that forces
+ *   the PR flow is "Require a pull request before merging", so we ask the rules
+ *   endpoint whether a `pull_request` rule applies. That endpoint reflects both
+ *   classic branch protection and rulesets, and needs only read access (the
+ *   branch-protection endpoint is admin-only).
+ * - GitLab: `.protected` is just as overbroad — GitLab protects the default
+ *   branch with "Allowed to push and merge: Maintainers" out of the box, so a
+ *   maintainer (whoever is cutting the release) can still push directly. The
+ *   branch object's `.can_push` answers the real question — "can the current
+ *   user push to this branch?" — so we route through a merge request only when
+ *   it's `false`.
  *
  * `host.base` is `https://<host>/<owner>/<repo>`; we recover the parts from it
  * rather than widening `HostInfo`.
@@ -39,7 +56,12 @@ export function forgeQuery(host: HostInfo, branch: string): ForgeQuery | null {
 
   switch (host.kind) {
     case 'github': {
-      const args = ['api', `repos/${owner}/${repo}/branches/${branch}`, '--jq', '.protected'];
+      const args = [
+        'api',
+        `repos/${owner}/${repo}/rules/branches/${branch}`,
+        '--jq',
+        'any(.type == "pull_request")',
+      ];
       // `gh` defaults to github.com; point it at an Enterprise host otherwise.
       if (hostname !== 'github.com') args.push('--hostname', hostname);
       return { cmd: 'gh', args };
@@ -53,7 +75,7 @@ export function forgeQuery(host: HostInfo, branch: string): ForgeQuery | null {
       // latter so self-hosted instances are targeted explicitly.
       return {
         cmd: 'glab',
-        args: ['api', path, '--jq', '.protected'],
+        args: ['api', path, '--jq', '.can_push == false'],
         env: { GITLAB_HOST: hostname },
       };
     }
