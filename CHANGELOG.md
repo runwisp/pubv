@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-16
+
 ### Fixed
 
 - A stray line trailing the link-reference block (e.g. a fat-fingered character on the last line) no longer defeats link parsing. Previously the trailing-link scan stopped at the first non-link line from the bottom, so the existing `[Unreleased]`/`[version]` definitions were absorbed into a section body and a fresh set was appended on release — leaving the changelog with duplicate link definitions. The scan now locates the trailing link block robustly, drops such stray lines, and collapses any duplicate link definitions; each repair is reported as a warning.
@@ -73,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.4.1...main
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.4.2...main
+[1.4.2]: https://github.com/runwisp/pubv/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/runwisp/pubv/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/runwisp/pubv/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/runwisp/pubv/compare/v1.2.0...v1.3.0
