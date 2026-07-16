@@ -532,6 +532,7 @@ async function resolveTagPrefix(
       { key: '', label: '1.2.3 (no prefix)' },
     ],
     'v',
+    { label: 'custom prefix…', prompt: 'enter tag prefix' },
   );
 }
 

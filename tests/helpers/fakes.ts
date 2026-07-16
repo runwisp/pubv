@@ -4,7 +4,7 @@ import type { Fs } from '../../src/ports/fs.js';
 import type { BranchStatus, Git, PushOptions, SignOptions } from '../../src/ports/git.js';
 import type { HostProber } from '../../src/ports/host-prober.js';
 import type { Logger, Spinner } from '../../src/ports/logger.js';
-import type { Prompt, SelectOption } from '../../src/ports/prompt.js';
+import type { Prompt, SelectCustom, SelectOption } from '../../src/ports/prompt.js';
 
 export class FakeFs implements Fs {
   files = new Map<string, string>();
@@ -161,7 +161,8 @@ export class FakePrompt implements Prompt {
     _message: string,
     _options: ReadonlyArray<SelectOption<K>>,
     defaultKey: K,
-  ): Promise<K> {
+    _custom?: SelectCustom,
+  ): Promise<K | string> {
     const next = this.script.shift();
     if (!next) return defaultKey;
     if (next.kind !== 'select') throw new Error(`FakePrompt: expected select, got ${next.kind}`);
