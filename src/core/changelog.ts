@@ -23,6 +23,12 @@ export interface Changelog {
   /** Trailing `[name]: url` references, in source order. */
   links: LinkRef[];
   eol: '\n' | '\r\n';
+  /**
+   * Non-fatal repairs applied while parsing / transforming — e.g. stray lines
+   * dropped from the link-reference region, or duplicate link defs collapsed.
+   * Surfaced to the user so a silently-normalized changelog is never a surprise.
+   */
+  warnings: string[];
 }
 
 export interface ReleaseOptions {
@@ -47,8 +53,9 @@ export function parse(text: string): Changelog {
     lines.pop();
   }
 
-  const { mainLines, links } = extractTrailingLinkRefs(lines);
+  const { mainLines, links: rawLinks, dropped } = extractTrailingLinkRefs(lines);
   const { header, sections } = splitHeaderAndSections(mainLines);
+  const { links, collapsed } = dedupeLinks(rawLinks);
 
   let unreleased: Section | null = null;
   const releases: Section[] = [];
@@ -60,28 +67,92 @@ export function parse(text: string): Changelog {
     }
   }
 
-  return { header, unreleased, releases, links, eol };
+  const warnings: string[] = [];
+  if (dropped.length > 0) warnings.push(droppedWarning(dropped));
+  for (const name of collapsed) warnings.push(collapsedWarning(name));
+
+  return { header, unreleased, releases, links, eol, warnings };
 }
 
-function extractTrailingLinkRefs(lines: string[]): { mainLines: string[]; links: LinkRef[] } {
-  // Walk from the end, accepting link-refs and blank lines until the first non-link, non-blank.
-  let cut = lines.length;
+/**
+ * Extract the trailing block of `[name]: url` link-reference definitions.
+ *
+ * Link refs always sit at the very tail of a Keep a Changelog file, after the
+ * final section. We locate that block from the bottom up rather than trusting
+ * the last line to be well-formed: a single stray line (e.g. a fat-fingered
+ * `˚`) below the refs must not hide them — otherwise the refs get absorbed into
+ * a section body and duplicated on the next release. Scoped to the tail so a
+ * `[x]: y`-shaped line inside a section body is never yanked out mid-document.
+ */
+function extractTrailingLinkRefs(lines: string[]): {
+  mainLines: string[];
+  links: LinkRef[];
+  dropped: string[];
+} {
+  // Find the last link-ref, scanning up from EOF but never crossing a section
+  // heading — refs live after the final section, so a heading means there are
+  // none trailing (leave the file untouched: no links, nothing dropped).
+  let lastLink = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]!;
-    if (line === '' || LINK_REF_RE.test(line)) {
-      cut = i;
-    } else {
+    if (LINK_REF_RE.test(lines[i]!)) {
+      lastLink = i;
       break;
     }
+    if (SECTION_RE.test(lines[i]!)) break;
+  }
+  if (lastLink === -1) return { mainLines: lines, links: [], dropped: [] };
+
+  // Walk further up across contiguous link-refs and blank lines to the block top.
+  let top = lastLink;
+  for (let i = lastLink - 1; i >= 0; i--) {
+    const line = lines[i]!;
+    if (line === '' || LINK_REF_RE.test(line)) top = i;
+    else break;
   }
 
+  // Everything from the block top to EOF is the link region: refs become links,
+  // non-blank non-link lines (junk trailing the refs) are dropped.
   const links: LinkRef[] = [];
-  for (let i = cut; i < lines.length; i++) {
-    const m = LINK_REF_RE.exec(lines[i]!);
+  const dropped: string[] = [];
+  for (let i = top; i < lines.length; i++) {
+    const line = lines[i]!;
+    const m = LINK_REF_RE.exec(line);
     if (m) links.push({ name: m[1]!, url: m[2]! });
+    else if (line !== '') dropped.push(line);
   }
 
-  return { mainLines: lines.slice(0, cut), links };
+  return { mainLines: lines.slice(0, top), links, dropped };
+}
+
+/**
+ * Collapse duplicate link definitions, keeping the first occurrence of each name
+ * (`Unreleased` matched case-insensitively). Returns the deduped list and the
+ * names that were collapsed, so callers can report the repair.
+ */
+function dedupeLinks(links: LinkRef[]): { links: LinkRef[]; collapsed: string[] } {
+  const seen = new Set<string>();
+  const out: LinkRef[] = [];
+  const collapsed: string[] = [];
+  for (const link of links) {
+    const key = link.name.toLowerCase();
+    if (seen.has(key)) {
+      collapsed.push(link.name);
+      continue;
+    }
+    seen.add(key);
+    out.push(link);
+  }
+  return { links: out, collapsed };
+}
+
+function droppedWarning(dropped: string[]): string {
+  const list = dropped.map((line) => `"${line}"`).join(', ');
+  const plural = dropped.length === 1 ? 'line' : 'lines';
+  return `ignored ${dropped.length} stray ${plural} below the link-reference section: ${list}`;
+}
+
+function collapsedWarning(name: string): string {
+  return `collapsed duplicate link definition [${name}]`;
 }
 
 function splitHeaderAndSections(mainLines: string[]): {
@@ -146,7 +217,8 @@ export function release(cl: Changelog, opts: ReleaseOptions): Changelog {
   };
   const newUnreleased: Section = { version: 'Unreleased', date: null, body: [] };
 
-  const links = rewriteLinks(cl.links, opts);
+  const { links, collapsed } = rewriteLinks(cl.links, opts);
+  const warnings = [...cl.warnings, ...collapsed.map(collapsedWarning)];
 
   return {
     header: cl.header,
@@ -154,10 +226,14 @@ export function release(cl: Changelog, opts: ReleaseOptions): Changelog {
     releases: [newRelease, ...cl.releases],
     links,
     eol: cl.eol,
+    warnings,
   };
 }
 
-function rewriteLinks(existing: LinkRef[], opts: ReleaseOptions): LinkRef[] {
+function rewriteLinks(
+  existing: LinkRef[],
+  opts: ReleaseOptions,
+): { links: LinkRef[]; collapsed: string[] } {
   const out: LinkRef[] = [];
   let inserted = false;
 
@@ -178,7 +254,10 @@ function rewriteLinks(existing: LinkRef[], opts: ReleaseOptions): LinkRef[] {
     );
   }
 
-  return out;
+  // Inserting the new `[version]` def can collide with a stale one already in
+  // the source (as when a first release reuses a hand-written link ref); drop
+  // the duplicate so the output never carries two defs for the same name.
+  return dedupeLinks(out);
 }
 
 export function serialize(cl: Changelog): string {

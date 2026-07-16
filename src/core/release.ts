@@ -301,14 +301,14 @@ async function buildPlan(
 
   log.kv('tag fmt', tagName, prefixNote(inputs.tagPrefixOverride, embeddedPrefix, tagPrefix, tags));
 
-  const newChangelog = serialize(
-    transformChangelog(cl, {
-      version: headingVersion,
-      date: inputs.today,
-      unreleasedUrl: compareUrl(host, tagName, defaultBranch),
-      versionUrl: compareUrl(host, fromRef, tagName),
-    }),
-  );
+  const released = transformChangelog(cl, {
+    version: headingVersion,
+    date: inputs.today,
+    unreleasedUrl: compareUrl(host, tagName, defaultBranch),
+    versionUrl: compareUrl(host, fromRef, tagName),
+  });
+  warnChangelogRepairs(released, inputs.changelogPath, log);
+  const newChangelog = serialize(released);
 
   return {
     changelogPath: inputs.changelogPath,
@@ -447,6 +447,15 @@ async function resolveHost(cl: Changelog, inputs: ReleaseInputs, ports: Ports): 
   return (
     (await resolveHostFromRemote(inputs, ports)) ?? resolveHostFromChangelog(cl, inputs, ports)
   );
+}
+
+/**
+ * Surface any non-fatal repairs the changelog parser/transform applied (stray
+ * lines dropped, duplicate link defs collapsed) so a normalized file is never a
+ * silent surprise. Emitted before the confirm prompt.
+ */
+function warnChangelogRepairs(cl: Changelog, path: string, log: Logger): void {
+  for (const warning of cl.warnings) log.warn(`${path}: ${warning}`);
 }
 
 function changelogLines(cl: Changelog): string[] {
@@ -759,6 +768,7 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
   await preflight(inputs, ports);
 
   const cl = parse(await fs.read(inputs.changelogPath));
+  warnChangelogRepairs(cl, inputs.changelogPath, log);
   const last = latestRelease(cl);
   if (!last) {
     throw new PubvError(

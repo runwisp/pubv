@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A stray line trailing the link-reference block (e.g. a fat-fingered character on the last line) no longer defeats link parsing. Previously the trailing-link scan stopped at the first non-link line from the bottom, so the existing `[Unreleased]`/`[version]` definitions were absorbed into a section body and a fresh set was appended on release — leaving the changelog with duplicate link definitions. The scan now locates the trailing link block robustly, drops such stray lines, and collapses any duplicate link definitions; each repair is reported as a warning.
+
 ## [1.4.1] - 2026-07-16
 
 ### Fixed
