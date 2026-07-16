@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The interactive tag-prefix picker could not select the no-prefix (bare `1.2.3`) option: it was a type-the-value prompt whose no-prefix choice had an empty key, and empty input already meant "use the default" (`v`), leaving that row unreachable. The picker is now arrow-key driven (↑/↓ + Enter) with a "custom prefix…" entry for arbitrary prefixes; piped/non-TTY input falls back to a numbered list, which also makes every option — including no-prefix — selectable.
+
 ## [1.4.0] - 2026-06-30
 
 ### Added
