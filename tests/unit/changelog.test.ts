@@ -49,6 +49,39 @@ describe('parse', () => {
     const cl = parse('# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2025-01-01\n');
     expect(cl.links).toEqual([]);
     expect(cl.releases).toHaveLength(1);
+    expect(cl.warnings).toEqual([]);
+  });
+
+  test('recovers link refs hidden behind a stray trailing line', () => {
+    const cl = parse(
+      '## [Unreleased]\n\n- x\n\n[Unreleased]: https://e.com/c/1.0.0...HEAD\n[1.0.0]: https://e.com/c/0.0.0...1.0.0\n˚\n',
+    );
+    // The `˚` must not defeat extraction: both refs are still captured, not
+    // absorbed into the section body.
+    expect(cl.links).toEqual([
+      { name: 'Unreleased', url: 'https://e.com/c/1.0.0...HEAD' },
+      { name: '1.0.0', url: 'https://e.com/c/0.0.0...1.0.0' },
+    ]);
+    expect(cl.unreleased!.body).toEqual(['- x']);
+    expect(cl.warnings).toEqual(['ignored 1 stray line below the link-reference section: "˚"']);
+  });
+
+  test('collapses duplicate link definitions in the source', () => {
+    const cl = parse(
+      '## [Unreleased]\n\n[Unreleased]: https://e.com/a\n[Unreleased]: https://e.com/b\n',
+    );
+    expect(cl.links).toEqual([{ name: 'Unreleased', url: 'https://e.com/a' }]);
+    expect(cl.warnings).toEqual(['collapsed duplicate link definition [Unreleased]']);
+  });
+
+  test('leaves a link-shaped line inside a section body untouched', () => {
+    // No trailing link block, so nothing should be pulled out of the body.
+    const cl = parse(
+      '## [Unreleased]\n\n[note]: see the migration guide\n\n## [1.0.0] - 2025-01-01\n\n- y\n',
+    );
+    expect(cl.links).toEqual([]);
+    expect(cl.warnings).toEqual([]);
+    expect(cl.unreleased!.body).toEqual(['[note]: see the migration guide']);
   });
 });
 
@@ -63,6 +96,29 @@ describe('release', () => {
         versionUrl: 'v',
       }),
     ).toThrow(PubvError);
+  });
+
+  test('collapses a stale version link def and carries parse warnings forward', () => {
+    // Mirrors the real-world corruption: a first release whose source already
+    // carried a `[1.0.0]` def plus a stray line trailing the link block.
+    const cl = parse(
+      '## [Unreleased]\n\n- x\n\n[Unreleased]: https://e.com/c/1.0.0...HEAD\n[1.0.0]: https://e.com/c/0.0.0...1.0.0\n˚\n',
+    );
+    const next = release(cl, {
+      version: '1.0.0',
+      date: '2026-07-16',
+      unreleasedUrl: 'https://e.com/-/c/1.0.0...main',
+      versionUrl: 'https://e.com/-/c/0.0.0...1.0.0',
+    });
+    // Exactly one def per name — no duplicate `[1.0.0]`.
+    expect(next.links).toEqual([
+      { name: 'Unreleased', url: 'https://e.com/-/c/1.0.0...main' },
+      { name: '1.0.0', url: 'https://e.com/-/c/0.0.0...1.0.0' },
+    ]);
+    expect(next.warnings).toEqual([
+      'ignored 1 stray line below the link-reference section: "˚"',
+      'collapsed duplicate link definition [1.0.0]',
+    ]);
   });
 
   test('moves unreleased body into the new versioned section', () => {
