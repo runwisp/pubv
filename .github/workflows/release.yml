@@ -19,11 +19,12 @@ jobs:
           bun-version: latest
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - name: Upgrade npm for OIDC trusted publishing
         # Trusted publishing (no token; uses the id-token below) requires npm
-        # >= 11.5.1, newer than the npm bundled with Node 20.
+        # >= 11.5.1. Current npm@latest (12.x) needs Node >= 22.22 / 24.15, so
+        # this step runs on Node 24 (Node 20 is also deprecated on runners).
         run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun run lint
