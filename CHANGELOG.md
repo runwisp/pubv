@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-16
+
 ### Fixed
 
 - The interactive tag-prefix picker could not select the no-prefix (bare `1.2.3`) option: it was a type-the-value prompt whose no-prefix choice had an empty key, and empty input already meant "use the default" (`v`), leaving that row unreachable. The picker is now arrow-key driven (↑/↓ + Enter) with a "custom prefix…" entry for arbitrary prefixes; piped/non-TTY input falls back to a numbered list, which also makes every option — including no-prefix — selectable.
@@ -67,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.4.0...main
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.4.1...main
+[1.4.1]: https://github.com/runwisp/pubv/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/runwisp/pubv/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/runwisp/pubv/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/runwisp/pubv/compare/v1.1.0...v1.2.0
