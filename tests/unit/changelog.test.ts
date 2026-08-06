@@ -32,20 +32,12 @@ describe('parse', () => {
     expect(parse('# t\r\n\r\n## [Unreleased]\r\n').eol).toBe('\r\n');
   });
 
-  test('treats lowercase `unreleased` heading as Unreleased', () => {
-    const cl = parse('## [unreleased]\n\n- foo\n');
-    expect(cl.unreleased).not.toBeNull();
-    expect(cl.unreleased!.version).toBe('Unreleased');
-  });
-
-  test('normalizes reference-link heading `[Unreleased][unreleased]`', () => {
-    const cl = parse('## [Unreleased][unreleased]\n\n- foo\n');
-    expect(cl.unreleased).not.toBeNull();
-    expect(cl.unreleased!.version).toBe('Unreleased');
-  });
-
-  test('normalizes inline-link heading `[Unreleased](unreleased)`', () => {
-    const cl = parse('## [Unreleased](unreleased)\n\n- foo\n');
+  test.each([
+    ['lowercase `unreleased` heading', '## [unreleased]\n\n- foo\n'],
+    ['reference-link heading `[Unreleased][unreleased]`', '## [Unreleased][unreleased]\n\n- foo\n'],
+    ['inline-link heading `[Unreleased](unreleased)`', '## [Unreleased](unreleased)\n\n- foo\n'],
+  ])('normalizes %s to Unreleased', (_label, input) => {
+    const cl = parse(input);
     expect(cl.unreleased).not.toBeNull();
     expect(cl.unreleased!.version).toBe('Unreleased');
   });

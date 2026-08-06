@@ -42,19 +42,37 @@ export interface ReleaseOptions {
 }
 
 const LINK_REF_RE = /^\[([^\]]+)\]:\s*(.+?)\s*$/;
+const SECTION_START_RE = /^##\s+\[([^\]]+)\]/;
 // The heading text may carry a markdown link target — reference-style
-// `## [Unreleased][unreleased]` or inline `## [Unreleased](unreleased)`. Only
-// the bracketed text (group 1) is kept; the target is discarded and link refs
-// are regenerated on release.
-const SECTION_RE =
-  /^##\s+\[([^\]]+)\](?:\[[^\]]*\]|\([^)]*\))?(?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?\s*$/;
+// `## [Unreleased][unreleased]` or inline `## [Unreleased](unreleased)`. It is
+// discarded here; link refs are regenerated on release.
+const LINK_TARGET_RE = /^\[[^\]]*\]|^\([^)]*\)/;
+const SECTION_DATE_RE = /^\s*-\s*(\d{4}-\d{2}-\d{2})\s*$/;
 
-function isSectionHeading(line: string): boolean {
-  return SECTION_RE.test(line);
+interface SectionMatch {
+  name: string;
+  date: string | null;
 }
 
-function matchSection(line: string): RegExpExecArray | null {
-  return SECTION_RE.exec(line);
+function matchSection(line: string): SectionMatch | null {
+  const start = SECTION_START_RE.exec(line);
+  if (!start) {
+    return null;
+  }
+  let rest = line.slice(start[0].length);
+  const target = LINK_TARGET_RE.exec(rest);
+  if (target) {
+    rest = rest.slice(target[0].length);
+  }
+  if (rest.trim() === '') {
+    return { name: start[1]!, date: null };
+  }
+  const date = SECTION_DATE_RE.exec(rest);
+  return date ? { name: start[1]!, date: date[1]! } : null;
+}
+
+function isSectionHeading(line: string): boolean {
+  return matchSection(line) !== null;
 }
 
 export function parse(text: string): Changelog {
@@ -189,8 +207,8 @@ function splitHeaderAndSections(mainLines: string[]): {
       i++;
       continue;
     }
-    const version = m[1]!;
-    const date = m[2] ?? null;
+    const version = m.name;
+    const date = m.date;
     i++;
 
     const body: string[] = [];
