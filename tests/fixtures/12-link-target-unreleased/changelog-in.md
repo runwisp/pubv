@@ -1,10 +1,10 @@
 # Changelog
 
-## (Unreleased)[unreleased]
+## [Unreleased][unreleased]
 
 ### Added
 
-- Reversed-link-syntax `(Unreleased)[unreleased]` heading gets normalized on release.
+- Link-target `[Unreleased][unreleased]` heading gets normalized on release.
 
 ## [0.5.0] - 2026-04-01
 

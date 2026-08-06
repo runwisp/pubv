@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Headings that carry a markdown link target are now recognized and normalized — reference-style `## [Unreleased][unreleased]` and inline `## [Unreleased](unreleased)`, on both the Unreleased and versioned sections.
+
 ## [1.5.0] - 2026-08-06
 
 ### Added
