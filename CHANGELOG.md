@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-06
+
 ### Fixed
 
 - Headings that carry a markdown link target are now recognized and normalized — reference-style `## [Unreleased][unreleased]` and inline `## [Unreleased](unreleased)`, on both the Unreleased and versioned sections.
@@ -85,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.5.0...main
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.5.1...main
+[1.5.1]: https://github.com/runwisp/pubv/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/runwisp/pubv/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/runwisp/pubv/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/runwisp/pubv/compare/v1.4.0...v1.4.1
