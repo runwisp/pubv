@@ -42,7 +42,8 @@ export interface ReleaseOptions {
 }
 
 const LINK_REF_RE = /^\[([^\]]+)\]:\s*(.+?)\s*$/;
-const SECTION_RE = /^##\s+\[([^\]]+)\](?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?\s*$/;
+const SECTION_RE =
+  /^##\s+(?:\([^)]+\)\s*)?\[([^\]]+)\](?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?\s*$/;
 
 export function parse(text: string): Changelog {
   const eol: '\n' | '\r\n' = text.includes('\r\n') ? '\r\n' : '\n';
