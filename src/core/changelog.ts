@@ -43,6 +43,22 @@ export interface ReleaseOptions {
 
 const LINK_REF_RE = /^\[([^\]]+)\]:\s*(.+?)\s*$/;
 const SECTION_RE = /^##\s+\[([^\]]+)\](?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?\s*$/;
+// Some tools/humans write the heading with a reversed-link-style paren prefix,
+// e.g. `## (Unreleased)[unreleased]`. Strip it before matching SECTION_RE so
+// that regex stays simple — the paren text itself is never used for anything.
+const HEADING_PAREN_PREFIX_RE = /^##\s+\([^)]+\)\s*(?=\[)/;
+
+function stripHeadingParenPrefix(line: string): string {
+  return line.replace(HEADING_PAREN_PREFIX_RE, '## ');
+}
+
+function isSectionHeading(line: string): boolean {
+  return SECTION_RE.test(stripHeadingParenPrefix(line));
+}
+
+function matchSection(line: string): RegExpExecArray | null {
+  return SECTION_RE.exec(stripHeadingParenPrefix(line));
+}
 
 export function parse(text: string): Changelog {
   const eol: '\n' | '\r\n' = text.includes('\r\n') ? '\r\n' : '\n';
@@ -98,7 +114,7 @@ function extractTrailingLinkRefs(lines: string[]): {
       lastLink = i;
       break;
     }
-    if (SECTION_RE.test(lines[i]!)) break;
+    if (isSectionHeading(lines[i]!)) break;
   }
   if (lastLink === -1) return { mainLines: lines, links: [], dropped: [] };
 
@@ -163,14 +179,14 @@ function splitHeaderAndSections(mainLines: string[]): {
   const sections: Section[] = [];
 
   let i = 0;
-  while (i < mainLines.length && !SECTION_RE.test(mainLines[i]!)) {
+  while (i < mainLines.length && !isSectionHeading(mainLines[i]!)) {
     header.push(mainLines[i]!);
     i++;
   }
   trimTrailingBlanks(header);
 
   while (i < mainLines.length) {
-    const m = SECTION_RE.exec(mainLines[i]!);
+    const m = matchSection(mainLines[i]!);
     if (!m) {
       // Should not happen if the file is well-formed; skip stray content between sections.
       i++;
@@ -181,7 +197,7 @@ function splitHeaderAndSections(mainLines: string[]): {
     i++;
 
     const body: string[] = [];
-    while (i < mainLines.length && !SECTION_RE.test(mainLines[i]!)) {
+    while (i < mainLines.length && !isSectionHeading(mainLines[i]!)) {
       body.push(mainLines[i]!);
       i++;
     }

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The `Unreleased` heading is now also recognized in the reversed markdown-link shape some tools/humans produce, e.g. `## (Unreleased)[unreleased]`, and normalized to `## [Unreleased]` on release.
+
 ## [1.4.2] - 2026-07-16
 
 ### Fixed
