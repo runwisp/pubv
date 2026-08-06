@@ -42,22 +42,19 @@ export interface ReleaseOptions {
 }
 
 const LINK_REF_RE = /^\[([^\]]+)\]:\s*(.+?)\s*$/;
-const SECTION_RE = /^##\s+\[([^\]]+)\](?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?\s*$/;
-// Some tools/humans write the heading with a reversed-link-style paren prefix,
-// e.g. `## (Unreleased)[unreleased]`. Strip it before matching SECTION_RE so
-// that regex stays simple — the paren text itself is never used for anything.
-const HEADING_PAREN_PREFIX_RE = /^##\s+\([^)]+\)\s*(?=\[)/;
-
-function stripHeadingParenPrefix(line: string): string {
-  return line.replace(HEADING_PAREN_PREFIX_RE, '## ');
-}
+// The heading text may carry a markdown link target — reference-style
+// `## [Unreleased][unreleased]` or inline `## [Unreleased](unreleased)`. Only
+// the bracketed text (group 1) is kept; the target is discarded and link refs
+// are regenerated on release.
+const SECTION_RE =
+  /^##\s+\[([^\]]+)\](?:\[[^\]]*\]|\([^)]*\))?(?:\s*-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?\s*$/;
 
 function isSectionHeading(line: string): boolean {
-  return SECTION_RE.test(stripHeadingParenPrefix(line));
+  return SECTION_RE.test(line);
 }
 
 function matchSection(line: string): RegExpExecArray | null {
-  return SECTION_RE.exec(stripHeadingParenPrefix(line));
+  return SECTION_RE.exec(line);
 }
 
 export function parse(text: string): Changelog {

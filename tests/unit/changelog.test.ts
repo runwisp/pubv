@@ -38,33 +38,25 @@ describe('parse', () => {
     expect(cl.unreleased!.version).toBe('Unreleased');
   });
 
-  test('normalizes reversed-link-syntax `(Unreleased)[unreleased]` heading', () => {
-    const cl = parse('## (Unreleased)[unreleased]\n\n- foo\n');
+  test('normalizes reference-link heading `[Unreleased][unreleased]`', () => {
+    const cl = parse('## [Unreleased][unreleased]\n\n- foo\n');
     expect(cl.unreleased).not.toBeNull();
     expect(cl.unreleased!.version).toBe('Unreleased');
   });
 
-  test('ignores paren text even when it mismatches the bracket name', () => {
-    const cl = parse('## (UNRELEASED)[Unreleased]\n\n- foo\n');
-    expect(cl.unreleased!.version).toBe('Unreleased');
-  });
-
-  test('tolerates extra whitespace between the paren and bracket groups', () => {
-    const cl = parse('## (Unreleased)  [unreleased]\n\n- foo\n');
-    expect(cl.unreleased!.version).toBe('Unreleased');
-  });
-
-  test('supports the paren-bracket shape on versioned headings too', () => {
-    const cl = parse('## (1.2.3)[1.2.3] - 2025-01-01\n');
-    expect(cl.releases).toHaveLength(1);
-    expect(cl.releases[0]!.version).toBe('1.2.3');
-    expect(cl.releases[0]!.date).toBe('2025-01-01');
-  });
-
-  test('does not treat real link syntax `[Unreleased](unreleased)` as a heading', () => {
+  test('normalizes inline-link heading `[Unreleased](unreleased)`', () => {
     const cl = parse('## [Unreleased](unreleased)\n\n- foo\n');
-    expect(cl.unreleased).toBeNull();
-    expect(cl.releases).toHaveLength(0);
+    expect(cl.unreleased).not.toBeNull();
+    expect(cl.unreleased!.version).toBe('Unreleased');
+  });
+
+  test('supports link-target headings on versioned sections too', () => {
+    const ref = parse('## [1.2.3][1.2.3] - 2025-01-01\n');
+    expect(ref.releases[0]!.version).toBe('1.2.3');
+    expect(ref.releases[0]!.date).toBe('2025-01-01');
+    const inline = parse('## [1.2.3](https://x/1.2.3) - 2025-01-01\n');
+    expect(inline.releases[0]!.version).toBe('1.2.3');
+    expect(inline.releases[0]!.date).toBe('2025-01-01');
   });
 
   test('captures dates and versions accurately', () => {
