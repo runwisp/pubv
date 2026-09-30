@@ -24,14 +24,26 @@ export function splitPrefix(input: string): { prefix: TagPrefix; version: string
   return { prefix: m[1]!, version: m[2]! };
 }
 
-export function detectPrefix(tags: readonly string[]): TagPrefixDetection {
+/**
+ * Mixed prefixes are resolved by the tag of `lastVersion` (the previous
+ * release): if exactly one prefix carries it, that is the scheme in use now.
+ */
+export function detectPrefix(
+  tags: readonly string[],
+  lastVersion: string | null = null,
+): TagPrefixDetection {
   const prefixes = new Set<string>();
+  const lastPrefixes = new Set<string>();
+  const last = lastVersion === null ? null : splitPrefix(lastVersion)?.version;
   for (const tag of tags) {
     const m = TAG_RE.exec(tag);
-    if (m) prefixes.add(m[1]!);
+    if (!m) continue;
+    prefixes.add(m[1]!);
+    if (m[2] === last) lastPrefixes.add(m[1]!);
   }
   if (prefixes.size === 0) return { kind: 'none' };
   if (prefixes.size === 1) return { kind: 'unique', prefix: [...prefixes][0]! };
+  if (lastPrefixes.size === 1) return { kind: 'unique', prefix: [...lastPrefixes][0]! };
   return { kind: 'ambiguous' };
 }
 

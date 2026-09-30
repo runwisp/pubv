@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Repos with both `v`-prefixed and bare tags now reuse the prefix of the previous release's tag instead of falling back to `v` under `--yes`.
+
 ## [1.5.1] - 2026-08-06
 
 ### Fixed

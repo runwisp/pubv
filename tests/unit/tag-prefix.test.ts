@@ -36,6 +36,16 @@ describe('detectPrefix', () => {
     expect(detectPrefix(['v1.0.0', '1.1.0'])).toEqual({ kind: 'ambiguous' });
   });
 
+  test('resolves a mix by the prefix of the last release tag', () => {
+    expect(detectPrefix(['v1.0.0', '1.1.0', '1.2.0'], '1.2.0')).toEqual({
+      kind: 'unique',
+      prefix: '',
+    });
+    expect(detectPrefix(['1.0.0', 'v1.1.0'], '1.1.0')).toEqual({ kind: 'unique', prefix: 'v' });
+    expect(detectPrefix(['v1.0.0', '1.0.0'], '1.0.0')).toEqual({ kind: 'ambiguous' });
+    expect(detectPrefix(['v1.0.0', '1.1.0'], '2.0.0')).toEqual({ kind: 'ambiguous' });
+  });
+
   test('returns "ambiguous" across distinct custom prefixes', () => {
     expect(detectPrefix(['myapp.1.0.0', 'lib.1.0.0'])).toEqual({ kind: 'ambiguous' });
   });
