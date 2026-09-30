@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-09-30
+
 ### Fixed
 
 - Repos with both `v`-prefixed and bare tags now reuse the prefix of the previous release's tag instead of falling back to `v` under `--yes`.
@@ -91,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-detect tag prefix from existing tags (`v1.2.3` vs `1.2.3`).
 - GitHub, GitLab, and Bitbucket compare-URL support.
 
-[Unreleased]: https://github.com/runwisp/pubv/compare/v1.5.1...main
+[Unreleased]: https://github.com/runwisp/pubv/compare/v1.5.2...main
+[1.5.2]: https://github.com/runwisp/pubv/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/runwisp/pubv/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/runwisp/pubv/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/runwisp/pubv/compare/v1.4.1...v1.4.2
