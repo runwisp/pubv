@@ -290,7 +290,7 @@ async function buildPlan(
     suggestions,
     prompt,
   );
-  const tagPrefix = await resolveTagPrefix(inputs, tags, embeddedPrefix, prompt);
+  const tagPrefix = await resolveTagPrefix(inputs, tags, suggestions.last, embeddedPrefix, prompt);
   const tagName = applyPrefix(nextVersion, tagPrefix);
   const headingVersion = changelogVersion(nextVersion, tagPrefix);
   const fromRef = await resolveFromRef(suggestions.last, tagPrefix, git);
@@ -299,7 +299,11 @@ async function buildPlan(
   const mrUrl =
     mode === 'merge-request' ? mergeRequestUrl(host, releaseBranch!, defaultBranch) : null;
 
-  log.kv('tag fmt', tagName, prefixNote(inputs.tagPrefixOverride, embeddedPrefix, tagPrefix, tags));
+  log.kv(
+    'tag fmt',
+    tagName,
+    prefixNote(inputs.tagPrefixOverride, embeddedPrefix, tagPrefix, tags, suggestions.last),
+  );
 
   const released = transformChangelog(cl, {
     version: headingVersion,
@@ -524,12 +528,13 @@ function orderedKinds(s: VersionSuggestions): BumpKind[] {
 async function resolveTagPrefix(
   inputs: ReleaseInputs,
   tags: readonly string[],
+  lastVersion: string | null,
   embeddedPrefix: TagPrefix | null,
   prompt: Prompt,
 ): Promise<TagPrefix> {
   if (inputs.tagPrefixOverride !== null) return inputs.tagPrefixOverride;
   if (embeddedPrefix !== null) return embeddedPrefix;
-  const detection = detectPrefix(tags);
+  const detection = detectPrefix(tags, lastVersion);
   if (detection.kind === 'unique') return detection.prefix;
   if (inputs.yes) return 'v';
   return await prompt.select<TagPrefix>(
@@ -550,10 +555,11 @@ function prefixNote(
   embeddedPrefix: TagPrefix | null,
   resolved: TagPrefix,
   tags: readonly string[],
+  lastVersion: string | null,
 ): string | undefined {
   if (override !== null) return 'from --tag-prefix';
   if (embeddedPrefix !== null) return 'from version arg';
-  const detection = detectPrefix(tags);
+  const detection = detectPrefix(tags, lastVersion);
   if (detection.kind === 'unique' && detection.prefix === resolved) return 'matches existing tags';
   if (detection.kind === 'none') return 'default (no existing tags)';
   return undefined;
@@ -780,11 +786,13 @@ async function runTagRelease(inputs: ReleaseInputs, ports: Ports): Promise<Relea
   const tags = await git.listTags();
   // If the changelog heading already carries a prefix it is the full tag name;
   // otherwise resolve the prefix (detect / override / prompt) and apply it.
+  // `last` isn't tagged yet, so the release before it decides a mixed history.
   const split = splitPrefix(last.version);
+  const previous = cl.releases[1]?.version ?? null;
   const tagName =
     split && split.prefix !== ''
       ? last.version
-      : applyPrefix(last.version, await resolveTagPrefix(inputs, tags, null, prompt));
+      : applyPrefix(last.version, await resolveTagPrefix(inputs, tags, previous, null, prompt));
   const commitMessage = tagName;
 
   if (tags.includes(tagName)) {

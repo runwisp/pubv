@@ -163,6 +163,17 @@ describe('run() — happy paths', () => {
     expect(ports.git.calls).toContain('tag:1.3.0:1.3.0');
   });
 
+  test('mixed v/bare tag history follows the last release tag under --yes', async () => {
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.input);
+    // Old releases were v-prefixed, recent ones are bare: stay bare.
+    ports.git.tags = ['v1.0.0', 'v1.1.0', '1.1.1', '1.2.0'];
+
+    const plan = await run(defaultInputs({ versionArg: 'minor' }), ports);
+    expect(plan.tagName).toBe('1.3.0');
+    expect(ports.git.calls).toContain('tag:1.3.0:1.3.0');
+  });
+
   test('adopts a custom prefix embedded in the version arg', async () => {
     const plan = await runWithCustomPrefixTags('myapp.1.3.0');
 
@@ -497,6 +508,15 @@ describe('run() — tag-release mode', () => {
   let ports: ReturnType<typeof makePorts>;
   beforeEach(() => {
     ports = makePorts();
+  });
+
+  test('mixed v/bare tag history follows the previous release tag', async () => {
+    const fixture = loadFixture('02-minor-added');
+    ports.fs.files.set('CHANGELOG.md', fixture.expected!);
+    ports.git.tags = ['v1.0.0', 'v1.1.0', '1.2.0'];
+
+    const plan = await run(defaultInputs({ tagRelease: true }), ports);
+    expect(plan.tagName).toBe('1.3.0');
   });
 
   test('tags the latest changelog release on HEAD and pushes the tag', async () => {
