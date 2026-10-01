@@ -1,5 +1,4 @@
 import { PubvError } from '../core/errors.js';
-import type { TagPrefix } from '../core/tag-prefix.js';
 
 export interface ParsedArgs {
   version: string | null;
@@ -7,7 +6,7 @@ export interface ParsedArgs {
   remote: string;
   /** Force a specific `YYYY-MM-DD` heading date (defaults to today). */
   date: string | null;
-  tagPrefix: TagPrefix | null;
+  tagPrefix: string | null;
   yes: boolean;
   dryRun: boolean;
   push: boolean;

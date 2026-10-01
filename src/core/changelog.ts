@@ -41,7 +41,7 @@ export interface ReleaseOptions {
   versionUrl: string;
 }
 
-const LINK_REF_RE = /^\[([^\]]+)\]:\s*(.+?)\s*$/;
+const LINK_REF_RE = /^\[([^\]]+)\]:(.+)$/;
 const SECTION_START_RE = /^##\s+\[([^\]]+)\]/;
 // The heading text may carry a markdown link target — reference-style
 // `## [Unreleased][unreleased]` or inline `## [Unreleased](unreleased)`. It is
@@ -80,7 +80,7 @@ export function parse(text: string): Changelog {
   const lines = text.split(/\r?\n/);
 
   // A trailing newline produces an empty final element from split — drop it once.
-  if (lines.length > 0 && lines[lines.length - 1] === '') {
+  if (lines.at(-1) === '') {
     lines.pop();
   }
 
@@ -148,7 +148,7 @@ function extractTrailingLinkRefs(lines: string[]): {
   for (let i = top; i < lines.length; i++) {
     const line = lines[i]!;
     const m = LINK_REF_RE.exec(line);
-    if (m) links.push({ name: m[1]!, url: m[2]! });
+    if (m) links.push({ name: m[1]!, url: m[2]!.trim() });
     else if (line !== '') dropped.push(line);
   }
 
@@ -226,7 +226,7 @@ function splitHeaderAndSections(mainLines: string[]): {
 }
 
 function trimTrailingBlanks(lines: string[]): void {
-  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  while (lines.at(-1) === '') lines.pop();
 }
 
 function trimLeadingBlanks(lines: string[]): void {
@@ -270,8 +270,10 @@ function rewriteLinks(
 
   for (const link of existing) {
     if (link.name.toLowerCase() === 'unreleased') {
-      out.push({ name: 'Unreleased', url: opts.unreleasedUrl });
-      out.push({ name: opts.version, url: opts.versionUrl });
+      out.push(
+        { name: 'Unreleased', url: opts.unreleasedUrl },
+        { name: opts.version, url: opts.versionUrl },
+      );
       inserted = true;
     } else {
       out.push(link);
@@ -304,7 +306,7 @@ export function serialize(cl: Changelog): string {
   for (const r of cl.releases) appendSection(out, r);
 
   if (cl.links.length > 0) {
-    if (out.length > 0 && out[out.length - 1] !== '') out.push('');
+    if (out.length > 0 && out.at(-1) !== '') out.push('');
     for (const link of cl.links) out.push(`[${link.name}]: ${link.url}`);
   }
 
@@ -314,7 +316,7 @@ export function serialize(cl: Changelog): string {
 }
 
 function appendSection(out: string[], section: Section): void {
-  if (out.length > 0 && out[out.length - 1] !== '') out.push('');
+  if (out.length > 0 && out.at(-1) !== '') out.push('');
   out.push(formatHeading(section));
   if (section.body.length > 0) {
     out.push('');

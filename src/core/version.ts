@@ -51,13 +51,19 @@ function bumpPrerelease(pre: string | null): string {
     // Increment the last segment that ends in a number — whether it's a bare
     // numeric segment (`rc.1` → `rc.2`) or a number glued to letters
     // (`RC5` → `RC6`, `beta2` → `beta3`).
-    const m = /^(.*?)(\d+)$/.exec(parts[i]!);
-    if (m) {
-      parts[i] = `${m[1]}${Number(m[2]) + 1}`;
+    const part = parts[i]!;
+    let start = part.length;
+    while (start > 0 && isDigit(part[start - 1]!)) start--;
+    if (start < part.length) {
+      parts[i] = `${part.slice(0, start)}${Number(part.slice(start)) + 1}`;
       return parts.join('.');
     }
   }
   return [...parts, '1'].join('.');
+}
+
+function isDigit(c: string): boolean {
+  return c >= '0' && c <= '9';
 }
 
 /**

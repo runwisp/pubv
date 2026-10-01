@@ -20,8 +20,9 @@ export function createLogger(opts: LoggerOptions): Logger {
 
   return {
     banner(name, version) {
+      const ver = pc.dim(`v${version}`);
       writeln();
-      writeln(`${INDENT}${pc.bold(pc.cyan(name))}  ${pc.dim(`v${version}`)}`);
+      writeln(`${INDENT}${pc.bold(pc.cyan(name))}  ${ver}`);
     },
     section(name) {
       const rule = pc.dim('─'.repeat(Math.max(0, RULE_WIDTH - name.length - 4)));

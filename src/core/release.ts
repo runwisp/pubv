@@ -21,7 +21,7 @@ import {
   parseRemoteUrl,
 } from './host.js';
 import { buildScaffold } from './init.js';
-import { type TagPrefix, applyPrefix, detectPrefix, splitPrefix } from './tag-prefix.js';
+import { applyPrefix, detectPrefix, splitPrefix } from './tag-prefix.js';
 import {
   type BumpKind,
   type SemVer,
@@ -36,7 +36,7 @@ export interface ReleaseInputs {
   changelogPath: string;
   versionArg: string | null;
   /** `null` → auto-detect from existing tags. */
-  tagPrefixOverride: TagPrefix | null;
+  tagPrefixOverride: string | null;
   yes: boolean;
   dryRun: boolean;
   push: boolean;
@@ -140,22 +140,7 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<Preflight
 
   const defaultBranch = await git.defaultBranch();
   const currentBranch = await git.currentBranch();
-
-  if (currentBranch === defaultBranch) {
-    log.ok(`on ${currentBranch}`);
-  } else if (inputs.allowBranch) {
-    log.warn(`releasing from ${currentBranch} (not ${defaultBranch}) — allowed via --allow-branch`);
-  } else if (inputs.yes) {
-    throw new PubvError(
-      'wrong-branch',
-      `not on ${defaultBranch} (on ${currentBranch}) — pass --allow-branch to release from a non-default branch`,
-    );
-  } else {
-    log.warn(`current branch is ${currentBranch}, expected ${defaultBranch}`);
-    if (!(await prompt.confirm('continue from this branch?', false))) {
-      throw new PubvError('wrong-branch', `not on ${defaultBranch}`);
-    }
-  }
+  await checkBranch(currentBranch, defaultBranch, inputs, ports);
 
   const clean = await git.isClean();
   if (clean) {
@@ -191,6 +176,31 @@ async function preflight(inputs: ReleaseInputs, ports: Ports): Promise<Preflight
   const mode = await resolveMode(inputs, ports, remoteHost, currentBranch, defaultBranch);
 
   return { scaffold, branch: currentBranch, defaultBranch, remoteHost, mode };
+}
+
+/** Gate releasing from a branch other than the default one. */
+async function checkBranch(
+  currentBranch: string,
+  defaultBranch: string,
+  inputs: ReleaseInputs,
+  ports: Ports,
+): Promise<void> {
+  const { log, prompt } = ports;
+  if (currentBranch === defaultBranch) {
+    log.ok(`on ${currentBranch}`);
+  } else if (inputs.allowBranch) {
+    log.warn(`releasing from ${currentBranch} (not ${defaultBranch}) — allowed via --allow-branch`);
+  } else if (inputs.yes) {
+    throw new PubvError(
+      'wrong-branch',
+      `not on ${defaultBranch} (on ${currentBranch}) — pass --allow-branch to release from a non-default branch`,
+    );
+  } else {
+    log.warn(`current branch is ${currentBranch}, expected ${defaultBranch}`);
+    if (!(await prompt.confirm('continue from this branch?', false))) {
+      throw new PubvError('wrong-branch', `not on ${defaultBranch}`);
+    }
+  }
 }
 
 /**
@@ -484,7 +494,7 @@ interface VersionSuggestions {
  * shown so headings match their tags (`## [myapp.1.2.3]`), but the conventional
  * `v` prefix and bare tags keep Keep-a-Changelog's bare headings (`## [1.2.3]`).
  */
-function changelogVersion(version: string, prefix: TagPrefix): string {
+function changelogVersion(version: string, prefix: string): string {
   return prefix === '' || prefix === 'v' ? version : applyPrefix(version, prefix);
 }
 
@@ -529,15 +539,15 @@ async function resolveTagPrefix(
   inputs: ReleaseInputs,
   tags: readonly string[],
   lastVersion: string | null,
-  embeddedPrefix: TagPrefix | null,
+  embeddedPrefix: string | null,
   prompt: Prompt,
-): Promise<TagPrefix> {
+): Promise<string> {
   if (inputs.tagPrefixOverride !== null) return inputs.tagPrefixOverride;
   if (embeddedPrefix !== null) return embeddedPrefix;
   const detection = detectPrefix(tags, lastVersion);
   if (detection.kind === 'unique') return detection.prefix;
   if (inputs.yes) return 'v';
-  return await prompt.select<TagPrefix>(
+  return await prompt.select<string>(
     detection.kind === 'none'
       ? 'no existing tags. tag prefix?'
       : 'mixed prefixed/bare tags. which to use?',
@@ -551,9 +561,9 @@ async function resolveTagPrefix(
 }
 
 function prefixNote(
-  override: TagPrefix | null,
-  embeddedPrefix: TagPrefix | null,
-  resolved: TagPrefix,
+  override: string | null,
+  embeddedPrefix: string | null,
+  resolved: string,
   tags: readonly string[],
   lastVersion: string | null,
 ): string | undefined {
@@ -569,7 +579,7 @@ interface ResolvedVersion {
   /** Bare semver, e.g. `1.2.3` or `1.0.0-rc.2`. */
   version: string;
   /** Prefix carried by a literal version arg (`myapp.` from `myapp.1.2.3`); `null` otherwise. */
-  embeddedPrefix: TagPrefix | null;
+  embeddedPrefix: string | null;
 }
 
 async function resolveNextVersion(
@@ -594,10 +604,11 @@ async function resolveNextVersion(
 }
 
 async function askForVersion(prompt: Prompt, s: VersionSuggestions): Promise<string> {
+  const pre = s.candidates.prerelease ? '/pre' : '';
   const tail =
     s.lastSemver === null
       ? '[prefix]x.y.z[-tag]'
-      : `major/minor/patch${s.candidates.prerelease ? '/pre' : ''} or [prefix]x.y.z[-tag]`;
+      : `major/minor/patch${pre} or [prefix]x.y.z[-tag]`;
   return await prompt.input(`version? (${tail})`, s.defaultVersion);
 }
 
@@ -615,7 +626,7 @@ function expandShorthand(
 
 async function resolveFromRef(
   lastVersion: string | null,
-  prefix: TagPrefix,
+  prefix: string,
   git: Git,
 ): Promise<string> {
   if (lastVersion) {
@@ -651,17 +662,18 @@ function printPlan(plan: ReleasePlan, log: Logger): void {
 
 async function confirm(ports: Ports, plan: ReleasePlan, inputs: ReleaseInputs): Promise<boolean> {
   ports.log.section('confirm');
+  const signed = inputs.sign ? ' (signed)' : '';
   const actions: string[] = [`${plan.createChangelog ? 'create' : 'write'} ${plan.changelogPath}`];
   if (plan.mode === 'merge-request' && plan.releaseBranch) {
     actions.push(
       `branch ${plan.releaseBranch}`,
-      `commit ${plan.commitMessage}${inputs.sign ? ' (signed)' : ''}`,
+      `commit ${plan.commitMessage}${signed}`,
       'push branch',
       'open merge request',
     );
   } else {
-    actions.push(`commit ${plan.commitMessage}${inputs.sign ? ' (signed)' : ''}`);
-    if (plan.tag) actions.push(`tag ${plan.tagName}${inputs.sign ? ' (signed)' : ''}`);
+    actions.push(`commit ${plan.commitMessage}${signed}`);
+    if (plan.tag) actions.push(`tag ${plan.tagName}${signed}`);
     if (plan.push) actions.push('push origin (with --follow-tags)');
     if (inputs.release && plan.tag && plan.push) actions.push(`create ${plan.host.kind} release`);
   }

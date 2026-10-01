@@ -10,17 +10,18 @@ export class FakeFs implements Fs {
   files = new Map<string, string>();
   writes: Array<{ path: string; contents: string }> = [];
 
-  async read(path: string): Promise<string> {
+  read(path: string): Promise<string> {
     const c = this.files.get(path);
-    if (c === undefined) throw new Error(`FakeFs: file not found: ${path}`);
-    return c;
+    if (c === undefined) return Promise.reject(new Error(`FakeFs: file not found: ${path}`));
+    return Promise.resolve(c);
   }
-  async write(path: string, contents: string): Promise<void> {
+  write(path: string, contents: string): Promise<void> {
     this.writes.push({ path, contents });
     this.files.set(path, contents);
+    return Promise.resolve();
   }
-  async exists(path: string): Promise<boolean> {
-    return this.files.has(path);
+  exists(path: string): Promise<boolean> {
+    return Promise.resolve(this.files.has(path));
   }
 }
 
@@ -38,67 +39,78 @@ export class FakeGit implements Git {
   pullShouldFail = false;
   calls: string[] = [];
 
-  async defaultBranch(): Promise<string> {
+  defaultBranch(): Promise<string> {
     this.calls.push('defaultBranch');
-    return this.defaultBranchName;
+    return Promise.resolve(this.defaultBranchName);
   }
-  async currentBranch(): Promise<string> {
+  currentBranch(): Promise<string> {
     this.calls.push('currentBranch');
-    return this.branch;
+    return Promise.resolve(this.branch);
   }
-  async remoteUrl(remote: string): Promise<string | null> {
+  remoteUrl(remote: string): Promise<string | null> {
     this.calls.push(`remoteUrl:${remote}`);
-    return this.remoteUrlValue;
+    return Promise.resolve(this.remoteUrlValue);
   }
-  async isClean(): Promise<boolean> {
+  isClean(): Promise<boolean> {
     this.calls.push('isClean');
-    return this.clean;
+    return Promise.resolve(this.clean);
   }
-  async fetch(remote: string): Promise<void> {
+  fetch(remote: string): Promise<void> {
     this.calls.push(`fetch:${remote}`);
-    if (this.fetchShouldFail) throw new Error('fake fetch failure');
+    if (this.fetchShouldFail) return Promise.reject(new Error('fake fetch failure'));
+    return Promise.resolve();
   }
-  async branchStatus(_branch: string, _remote: string): Promise<BranchStatus> {
+  branchStatus(_branch: string, _remote: string): Promise<BranchStatus> {
     this.calls.push('branchStatus');
-    return this.upstream;
+    return Promise.resolve(this.upstream);
   }
-  async pull(remote: string, branch: string): Promise<void> {
+  pull(remote: string, branch: string): Promise<void> {
     this.calls.push(`pull:${remote}:${branch}`);
-    if (this.pullShouldFail) throw new Error('fake pull failure');
+    if (this.pullShouldFail) return Promise.reject(new Error('fake pull failure'));
+    return Promise.resolve();
   }
-  async listTags(): Promise<string[]> {
+  listTags(): Promise<string[]> {
     this.calls.push('listTags');
-    return this.tags;
+    return Promise.resolve(this.tags);
   }
-  async firstCommit(): Promise<string> {
+  firstCommit(): Promise<string> {
     this.calls.push('firstCommit');
-    return this.rootCommit;
+    return Promise.resolve(this.rootCommit);
   }
-  async stage(path: string): Promise<void> {
+  stage(path: string): Promise<void> {
     this.calls.push(`stage:${path}`);
+    return Promise.resolve();
   }
-  async commit(message: string, options?: SignOptions): Promise<void> {
+  commit(message: string, options?: SignOptions): Promise<void> {
     this.calls.push(`commit:${message}${options?.sign ? ':signed' : ''}`);
+    return Promise.resolve();
   }
-  async tag(name: string, message: string, options?: SignOptions): Promise<void> {
+  tag(name: string, message: string, options?: SignOptions): Promise<void> {
     this.calls.push(`tag:${name}:${message}${options?.sign ? ':signed' : ''}`);
+    return Promise.resolve();
   }
-  async push(remote: string, branch: string, options: PushOptions): Promise<void> {
-    const flag = options.followTags ? 'follow' : options.setUpstream ? 'upstream' : 'plain';
+  push(remote: string, branch: string, options: PushOptions): Promise<void> {
+    let flag = 'plain';
+    if (options.followTags) flag = 'follow';
+    else if (options.setUpstream) flag = 'upstream';
     this.calls.push(`push:${remote}:${branch}:${flag}`);
-    if (this.pushShouldFail) throw new Error('fake push failure');
+    if (this.pushShouldFail) return Promise.reject(new Error('fake push failure'));
+    return Promise.resolve();
   }
-  async createBranch(name: string): Promise<void> {
+  createBranch(name: string): Promise<void> {
     this.calls.push(`createBranch:${name}`);
     this.branch = name;
+    return Promise.resolve();
   }
-  async switchBranch(name: string): Promise<void> {
+  switchBranch(name: string): Promise<void> {
     this.calls.push(`switchBranch:${name}`);
     this.branch = name;
+    return Promise.resolve();
   }
-  async pushTag(remote: string, tag: string): Promise<void> {
+  pushTag(remote: string, tag: string): Promise<void> {
     this.calls.push(`pushTag:${remote}:${tag}`);
-    if (this.pushShouldFail) throw new Error('fake push failure');
+    if (this.pushShouldFail) return Promise.reject(new Error('fake push failure'));
+    return Promise.resolve();
   }
 }
 
@@ -113,14 +125,14 @@ export class FakeForge implements Forge {
   requests: ReleaseRequest[] = [];
   calls: string[] = [];
 
-  async branchProtected(_host: HostInfo, branch: string): Promise<boolean | 'cli-missing' | null> {
+  branchProtected(_host: HostInfo, branch: string): Promise<boolean | 'cli-missing' | null> {
     this.calls.push(`branchProtected:${branch}`);
-    return this.protectedResult;
+    return Promise.resolve(this.protectedResult);
   }
 
-  async createRelease(req: ReleaseRequest): Promise<ReleaseResult> {
+  createRelease(req: ReleaseRequest): Promise<ReleaseResult> {
     this.requests.push(req);
-    return this.releaseResult;
+    return Promise.resolve(this.releaseResult);
   }
 }
 
@@ -130,9 +142,9 @@ export class FakeHostProber implements HostProber {
   /** Hostnames passed to `classify`, in order — empty unless a probe ran. */
   calls: string[] = [];
 
-  async classify(hostname: string): Promise<HostKind | null> {
+  classify(hostname: string): Promise<HostKind | null> {
     this.calls.push(hostname);
-    return this.kind;
+    return Promise.resolve(this.kind);
   }
 }
 
@@ -145,28 +157,28 @@ export class FakePrompt implements Prompt {
   /** Push answers in the order they will be consumed. */
   script: ScriptedAnswer[] = [];
 
-  async confirm(_message: string, defaultYes: boolean): Promise<boolean> {
-    const next = this.script.shift();
-    if (!next) return defaultYes;
-    if (next.kind !== 'confirm') throw new Error(`FakePrompt: expected confirm, got ${next.kind}`);
-    return next.value;
+  confirm(_message: string, defaultYes: boolean): Promise<boolean> {
+    return this.take('confirm', defaultYes);
   }
-  async input(_message: string, defaultValue: string): Promise<string> {
-    const next = this.script.shift();
-    if (!next) return defaultValue;
-    if (next.kind !== 'input') throw new Error(`FakePrompt: expected input, got ${next.kind}`);
-    return next.value;
+  input(_message: string, defaultValue: string): Promise<string> {
+    return this.take('input', defaultValue);
   }
-  async select<K extends string>(
+  select<K extends string>(
     _message: string,
     _options: ReadonlyArray<SelectOption<K>>,
     defaultKey: K,
     _custom?: SelectCustom,
   ): Promise<K | string> {
+    return this.take('select', defaultKey);
+  }
+
+  private take<T>(kind: ScriptedAnswer['kind'], fallback: T): Promise<T> {
     const next = this.script.shift();
-    if (!next) return defaultKey;
-    if (next.kind !== 'select') throw new Error(`FakePrompt: expected select, got ${next.kind}`);
-    return next.value as K;
+    if (!next) return Promise.resolve(fallback);
+    if (next.kind !== kind) {
+      return Promise.reject(new Error(`FakePrompt: expected ${kind}, got ${next.kind}`));
+    }
+    return Promise.resolve(next.value as T);
   }
 }
 

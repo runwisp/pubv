@@ -122,7 +122,7 @@ function buildRemoteRef(host: string, rawPath: string): RemoteRef | null {
   if (!host) return null;
   const segments = rawPath.split('/').filter(Boolean);
   if (segments.length === 0) return null;
-  segments[segments.length - 1] = stripTrailingGit(segments[segments.length - 1]!);
+  segments[segments.length - 1] = stripTrailingGit(segments.at(-1)!);
   return { host, projectPath: segments.join('/') };
 }
 

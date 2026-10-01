@@ -94,9 +94,7 @@ function makeHostProber(version: string): HostProber {
   const off = process.env.PUBV_NO_HOST_PROBE;
   if (off && off !== '0')
     return {
-      async classify() {
-        return null;
-      },
+      classify: () => Promise.resolve(null),
     };
   return createHttpHostProber({ userAgent: `pubv/${version}` });
 }
