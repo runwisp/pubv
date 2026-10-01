@@ -23,11 +23,9 @@ export function createPrompt(opts: PromptOptions): Prompt {
     },
 
     async input(message, defaultValue) {
+      const hint = pc.dim(`[${defaultValue}]`);
       const answer = (
-        await ask(
-          opts,
-          `${INDENT}${pc.bold('?')} ${message} ${pc.dim(`[${defaultValue}]`)} ${pc.cyan('›')} `,
-        )
+        await ask(opts, `${INDENT}${pc.bold('?')} ${message} ${hint} ${pc.cyan('›')} `)
       ).trim();
       return answer || defaultValue;
     },
@@ -174,7 +172,8 @@ async function selectNumbered<K extends string>(
       row.kind === 'custom'
         ? pc.italic(custom!.label)
         : `${pc.bold(keyLabel(row.key))}  ${pc.dim(row.label)}`;
-    out.write(`${INDENT}  ${pc.dim(`${i + 1})`)} ${marker} ${text}\n`);
+    const num = pc.dim(`${i + 1})`);
+    out.write(`${INDENT}  ${num} ${marker} ${text}\n`);
   });
 
   const hint = pc.dim(`[${defaultIdx + 1}]`);
